@@ -1,0 +1,18 @@
+function addOvernightCheckbox(container, shiftEnd) {
+  container.innerHTML = '';
+  var cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'overnight-cb';
+  cb.id = 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  var label = document.createElement('label');
+  label.htmlFor = cb.id;
+  label.textContent = 'Next day (crosses midnight)';
+  label.style.cssText = 'color:var(--muted);font-size:10.5px;font-weight:400;text-transform:none;letter-spacing:0;cursor:pointer;';
+  container.appendChild(cb);
+  container.appendChild(label);
+  cb.addEventListener('change', function () {
+    var evt = new Event('change');
+    shiftEnd.dispatchEvent(evt);
+  });
+  return cb;
+}

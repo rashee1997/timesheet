@@ -1,0 +1,20 @@
+function autoDismissSuccess(boxEl, delay) {
+  delay = delay || 4000;
+  var timer = boxEl._autoDismissTimer;
+  if (timer) clearTimeout(timer);
+  boxEl._autoDismissTimer = setTimeout(function () {
+    if (boxEl.className.indexOf('success') !== -1) {
+      boxEl.className = 'status-box';
+      boxEl.innerHTML = '';
+    }
+  }, delay);
+}
+
+function debounce(fn, ms) {
+  var timer = null;
+  return function () {
+    var ctx = this, args = arguments;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () { fn.apply(ctx, args); }, ms || 300);
+  };
+}

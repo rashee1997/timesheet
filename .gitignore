@@ -1,0 +1,8 @@
+# Secrets - never commit
+.env
+
+# Node (test-cloudflare-models.mjs)
+node_modules/
+
+# OS
+.DS_Store

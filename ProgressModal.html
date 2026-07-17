@@ -1,0 +1,25 @@
+<div id="progressModalOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.35);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;max-width:380px;width:85%;box-shadow:0 8px 30px rgba(0,0,0,0.2);padding:24px 20px 20px;text-align:center;">
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:16px;" id="progressModalTitle">Processing…</div>
+    <div id="progressStatus" style="font-size:13px;color:var(--muted);margin-bottom:12px;">⏳ Sending report…</div>
+    <div id="progressSpinner"><span class="spinner" style="border-top-color:var(--accent);border-left-color:var(--accent);width:20px;height:20px;"></span></div>
+  </div>
+</div>
+<script>
+function showProgressModal(title) {
+  document.getElementById('progressModalTitle').textContent = title || 'Processing…';
+  document.getElementById('progressStatus').textContent = '⏳ Sending report…';
+  document.getElementById('progressSpinner').style.display = 'block';
+  document.getElementById('progressModalOverlay').style.display = 'flex';
+}
+
+function setProgressDone(message) {
+  document.getElementById('progressStatus').textContent = '✅ ' + (message || 'Sent successfully');
+  document.getElementById('progressStatus').style.color = 'var(--success)';
+  document.getElementById('progressSpinner').style.display = 'none';
+}
+
+function hideProgressModal() {
+  document.getElementById('progressModalOverlay').style.display = 'none';
+}
+</script>

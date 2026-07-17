@@ -1,0 +1,1968 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --accent: #d98a4f;
+      --accent-dark: #b56f39;
+      --accent-tint: #fbf0e6;
+      --confirm: #b08b52;
+      --bg: #f4f5f5;
+      --card: #ffffff;
+      --border: #e5e7eb;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --error: #dc2626;
+      --error-bg: #fef2f2;
+      --warn-bg: #fffbeb;
+      --warn-border: #f59e0b;
+      --success-bg: #ecfdf5;
+      --success: #059669;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    body {
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white;
+      padding: 12px 20px;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+    .header p {
+      margin: 3px 0 0;
+      font-size: 11px;
+      opacity: 0.9;
+    }
+    .active-sheet-bar {
+      background: var(--accent-tint);
+      color: var(--accent-dark);
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 6px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .content {
+      padding: 14px 20px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .toggle-container {
+      display: flex;
+      background: #e5e7eb;
+      border-radius: 8px;
+      padding: 3px;
+      margin-bottom: 14px;
+    }
+    .toggle-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      padding: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .toggle-btn.active {
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .field {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 5px;
+    }
+    input[type="date"],
+    input[type="time"],
+    input[type="text"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 13px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+      transition: border-color 0.15s ease;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    input.input-error, select.input-error {
+      border-color: var(--error) !important;
+      background-color: #fef2f2 !important;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+    .row .field { flex: 1; margin-bottom: 0; }
+    
+    /* Search Dropdown with Selected Chips layout */
+    .search-dropdown-wrapper {
+      position: relative;
+    }
+    .dropdown-panel {
+      position: absolute;
+      width: 100%;
+      max-height: 160px;
+      overflow-y: auto;
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      margin-top: 4px;
+      z-index: 1000;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    .dropdown-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      border-bottom: 1px solid #f3f4f6;
+      transition: background 0.15s;
+    }
+    .dropdown-item:hover {
+      background: var(--accent-tint);
+      color: var(--accent-dark);
+    }
+    .dropdown-item-disabled {
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-style: italic;
+    }
+    .chips-list {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      background: var(--accent-tint);
+      color: var(--accent-dark);
+      border: 1px solid var(--accent);
+      border-radius: 16px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      margin: 2px 4px 4px 0;
+    }
+    .remove-chip-btn {
+      margin-left: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      line-height: 1;
+    }
+    .remove-chip-btn:hover {
+      color: var(--error);
+    }
+
+    .date-group {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .date-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+    }
+    .date-group-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-dark);
+      text-transform: uppercase;
+    }
+    .date-group-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-group-action {
+      background: none;
+      border: none;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .btn-duplicate {
+      color: var(--accent-dark);
+    }
+    .btn-duplicate:hover {
+      text-decoration: underline;
+    }
+    .btn-remove-group {
+      color: var(--error);
+    }
+    .btn-remove-group:hover {
+      text-decoration: underline;
+    }
+    .shift-rows-list {
+      margin-top: 8px;
+    }
+    .shift-row-card {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .shift-row-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .shift-row-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .btn-remove-shift {
+      background: none;
+      border: none;
+      color: var(--error);
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .btn-helper {
+      background: transparent;
+      border: 1px dashed var(--accent);
+      color: var(--accent-dark);
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      text-align: center;
+      margin-top: 6px;
+    }
+    .btn-helper:hover { background: var(--accent-tint); }
+    
+    /* Status styling */
+    .status-box {
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+      display: none;
+      white-space: pre-line;
+    }
+    .status-box.error {
+      display: block;
+      background: var(--error-bg);
+      color: var(--error);
+      border: 1px solid #fecaca;
+    }
+    .status-box.warn {
+      display: block;
+      background: var(--warn-bg);
+      color: #92400e;
+      border: 1px solid var(--warn-border);
+    }
+    .status-box.success {
+      display: block;
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid #a7f3d0;
+    }
+    .confirm-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+    }
+    .footer {
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    button.footer-btn {
+      border: none;
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.05s ease;
+    }
+    button.footer-btn:active { transform: scale(0.98); }
+    button.footer-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      flex: 1;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
+    .btn-secondary {
+      background: #f1f1f0;
+      color: var(--text);
+    }
+    .btn-warn {
+      background: var(--confirm);
+      color: white;
+    }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 6px;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Collapsible AI Panel Styling */
+    .ai-panel {
+      background: var(--card);
+      border: 1.5px dashed var(--accent);
+      border-radius: 8px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .ai-panel-header {
+      background: var(--accent-tint);
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .ai-panel-header strong {
+      font-size: 12.5px;
+      color: var(--accent-dark);
+    }
+    .ai-panel-toggle-icon {
+      font-size: 10px;
+      color: var(--accent-dark);
+      font-weight: bold;
+    }
+    .ai-panel-body {
+      padding: 12px;
+      border-top: 1px dashed var(--accent);
+    }
+    .ai-panel-body textarea {
+      width: 100%;
+      height: 90px;
+      padding: 8px;
+      font-size: 12.5px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-family: inherit;
+      resize: vertical;
+    }
+    .ai-panel-body textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* AI Generated highlighting */
+    .ai-populated {
+      border: 1.5px solid #f59e0b !important;
+      background-color: #fffbeb !important;
+      transition: all 0.2s ease;
+    }
+    .ai-shift-feedback {
+      background: #fffbeb;
+      border: 1px dashed #f59e0b;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header" style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <h1>⏱ Add Time Entry</h1>
+      <p>Choose single schedule mode or set distinct entries per employee.</p>
+    </div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:rgba(255,255,255,0.8);cursor:pointer;">
+      <input type="checkbox" id="darkModeToggle" style="accent-color:white;"> Dark
+    </label>
+  </div>
+
+  <div class="active-sheet-bar">Active Sheet: <?= activeSheetName ?></div>
+
+  <div class="content">
+
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button type="button" id="viewExistingBtn" style="flex:1;background:var(--card);border:1.5px solid var(--border);border-radius:6px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);">📅 View Existing Entries</button>
+      <button type="button" id="toggleTemplatesBtn" style="flex:1;background:var(--card);border:1.5px solid var(--border);border-radius:6px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);">📋 Shift Templates</button>
+    </div>
+
+    <div id="templatesPanel" style="display:none;background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Shift Templates</div>
+      <div id="templatesList" style="font-size:12px;margin-bottom:8px;max-height:120px;overflow-y:auto;"></div>
+      <div class="row" style="gap:6px;">
+        <input type="text" id="templateNameInput" placeholder="Template name" style="flex:1;padding:5px 8px;font-size:11px;">
+        <button type="button" id="saveTemplateBtn" style="background:var(--accent-tint);color:var(--accent-dark);border:1px solid var(--accent);border-radius:4px;padding:5px 10px;font-size:10px;font-weight:600;cursor:pointer;">Save Current</button>
+      </div>
+    </div>
+
+    <!-- COLLAPSIBLE AI IMPORT PANEL -->
+    <div class="ai-panel">
+      <div class="ai-panel-header" id="aiPanelHeader">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span>⚡</span>
+          <strong>QuickFill Parser</strong>
+        </div>
+        <span class="ai-panel-toggle-icon" id="aiToggleIcon">▼</span>
+      </div>
+      <div class="ai-panel-body" id="aiPanelBody" style="display: none;">
+        <p style="margin-top: 0; font-size: 11px; color: var(--muted); line-height: 1.4;">
+          Paste text or a screenshot of shift notes. QuickFill will extract dates, employees, jobs, and times.
+        </p>
+        <div style="position:relative;">
+          <textarea id="aiInputText" placeholder="Paste text or press Ctrl+V to add a screenshot..."></textarea>
+          <button type="button" id="aiImageBtn" style="position:absolute;right:4px;bottom:4px;width:26px;height:26px;border-radius:4px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;color:var(--accent-dark);" title="Add image">+</button>
+        </div>
+        <div id="aiImagePreview" style="display:none;margin-top:6px;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);position:relative;">
+          <img id="aiImagePreviewImg" style="max-height:80px;max-width:100%;border-radius:4px;display:block;" alt="Preview">
+          <button type="button" id="aiImageRemoveBtn" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;color:#dc2626;" title="Remove image">✕</button>
+        </div>
+        <input type="file" id="aiImageInput" accept="image/*" style="display:none">
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button type="button" class="btn-helper" id="aiParseBtn" style="flex:1;padding:8px;background:var(--accent-tint);color:var(--accent-dark);border-style:solid;">
+            ✨ QuickFill Notes
+          </button>
+          <button type="button" id="aiCancelBtn" style="display:none;padding:8px 12px;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;">Cancel</button>
+        </div>
+        <div id="aiStatusBox" class="status-box"></div>
+      </div>
+    </div>
+    
+    <div class="toggle-container">
+      <button type="button" class="toggle-btn active" id="singleModeBtn">Single Entry Mode</button>
+      <button type="button" class="toggle-btn" id="bulkModeBtn">Hybrid Bulk Mode</button>
+    </div>
+
+    <form id="entryForm">
+      
+      <!-- SINGLE MODE -->
+      <div id="singleFields">
+        <div class="field">
+          <label for="date">Date <span id="fridayBadge" style="display:none;color:#92400e;background:#fffbeb;border:1px solid #f59e0b;border-radius:10px;padding:0 7px;font-size:9px;font-weight:700;text-transform:none;letter-spacing:0;margin-left:6px;">FRI = 100% OT</span></label>
+          <input type="date" id="date">
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="startTime">Start Time</label>
+            <input type="time" id="startTime">
+          </div>
+          <div class="field">
+            <label for="endTime">End Time</label>
+            <input type="time" id="endTime">
+          </div>
+        </div>
+
+        <!-- Single Mode Live Hour Preview -->
+        <div id="singlePreviewContainer" style="margin-top: 8px; margin-bottom: 12px;"></div>
+
+        <div class="field">
+          <label for="jobOrder">Job Order</label>
+          <input type="text" id="jobOrder" class="job-order-input" list="jobOrderList" placeholder="e.g. AKCC, SAIPEM, QATAR SAND">
+        </div>
+
+        <div class="field">
+          <label>Employees</label>
+          <div id="singleSearchSelectorContainer"></div>
+        </div>
+      </div>
+
+      <!-- HYBRID BULK MODE -->
+      <div id="bulkFields" style="display:none;">
+        
+        <!-- Batch Summary Bar placed within the Bulk View -->
+        <div id="batchSummaryBar" style="display: none; margin-bottom: 12px; position: sticky; top: 0; z-index: 10;"></div>
+
+        <div id="dateGroupsContainer"></div>
+        
+        <button type="button" class="footer-btn btn-secondary" id="addDateGroupBtn" style="width:100%; margin-top: 4px; margin-bottom: 12px;">
+          📅 Add Date Group
+        </button>
+      </div>
+
+      <div class="status-box" id="statusBox"></div>
+      <datalist id="jobOrderList"></datalist>
+    </form>
+  </div>
+
+  <div class="footer">
+    <button type="button" class="footer-btn btn-secondary" id="undoBtn" style="flex:0.3;display:none;">↩ Undo</button>
+    <button type="button" class="footer-btn btn-secondary" id="clearBtn" style="flex: 0.3;">Clear</button>
+    <button type="button" class="footer-btn btn-primary" id="submitBtn">Save Entry</button>
+  </div>
+
+  <?!= HtmlService.createHtmlOutputFromFile('ConfirmModal').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('WeeklyView').getContent(); ?>
+
+  <script>
+    <?!= HtmlService.createHtmlOutputFromFile('SharedUi').getContent(); ?>
+    <?!= HtmlService.createHtmlOutputFromFile('OvernightHelper').getContent(); ?>
+    <?!= HtmlService.createHtmlOutputFromFile('DarkMode').getContent(); ?>
+
+    const ACTIVE_SHEET_NAME = <?!= JSON.stringify(activeSheetName) ?>;
+
+    const singleModeBtn = document.getElementById('singleModeBtn');
+    const bulkModeBtn = document.getElementById('bulkModeBtn');
+    const singleFields = document.getElementById('singleFields');
+    const bulkFields = document.getElementById('bulkFields');
+    const dateGroupsContainer = document.getElementById('dateGroupsContainer');
+    const addDateGroupBtn = document.getElementById('addDateGroupBtn');
+
+    const dateInput = document.getElementById('date');
+    const startInput = document.getElementById('startTime');
+    const endInput = document.getElementById('endTime');
+    const jobOrderInput = document.getElementById('jobOrder');
+    
+    const statusBox = document.getElementById('statusBox');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // AI DOM references
+    const aiPanelHeader = document.getElementById('aiPanelHeader');
+    const aiPanelBody = document.getElementById('aiPanelBody');
+    const aiToggleIcon = document.getElementById('aiToggleIcon');
+    const aiInputText = document.getElementById('aiInputText');
+    const aiParseBtn = document.getElementById('aiParseBtn');
+    const aiStatusBox = document.getElementById('aiStatusBox');
+    const aiImageBtn = document.getElementById('aiImageBtn');
+    const aiImageInput = document.getElementById('aiImageInput');
+    const aiImagePreview = document.getElementById('aiImagePreview');
+    const aiImagePreviewImg = document.getElementById('aiImagePreviewImg');
+    const aiImageRemoveBtn = document.getElementById('aiImageRemoveBtn');
+    const aiCancelBtn = document.getElementById('aiCancelBtn');
+    let currentImageBase64 = null;
+    let currentImageMimeType = null;
+    let aiCancelled = false;
+
+    let currentMode = 'single';
+    let ALL_EMPLOYEES = []; 
+    let dateGroupCount = 0;
+    let pendingConfirmType = null;
+
+    let singleSelector = null;
+    const singleSelectedCols = new Set();
+
+    const today = new Date();
+    dateInput.value = today.toISOString().slice(0, 10);
+    (function () {
+      var badge = document.getElementById('fridayBadge');
+      if (badge) badge.style.display = isFridayDate(dateInput.value) ? 'inline' : 'none';
+    })();
+
+    // --- Dynamic Preview Calculations ---
+
+    function computeClientHours(startTime, endTime) {
+      if (!startTime || !endTime) return null;
+      const [sh, sm] = startTime.split(':').map(Number);
+      const [eh, em] = endTime.split(':').map(Number);
+      
+      if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return null;
+      
+      let startMs = (sh * 60 + sm) * 60 * 1000;
+      let endMs = (eh * 60 + em) * 60 * 1000;
+      
+      let overnight = false;
+      let diffMs = endMs - startMs;
+      if (diffMs < 0) {
+        diffMs += 24 * 60 * 60 * 1000;
+        overnight = true;
+      }
+      
+      const totalHours = diffMs / (1000 * 60 * 60);
+      return { totalHours, overnight };
+    }
+
+    function splitNormalOt(totalHours, isFriday) {
+      if (isFriday) {
+        return { normal: 0, ot: totalHours, isFridayOvertime: true };
+      } else {
+        const normal = Math.min(8, totalHours);
+        const ot = Math.max(0, totalHours - 8);
+        return { normal, ot, isFridayOvertime: false };
+      }
+    }
+
+    function isFridayDate(dateStr) {
+      if (!dateStr) return false;
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.getDay() === 5; // Friday is 5
+    }
+
+    function renderHoursPreview(container, dateVal, startTime, endTime) {
+      if (!container) return;
+      const hoursData = computeClientHours(startTime, endTime);
+      if (!hoursData || hoursData.totalHours === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      
+      const isFriday = isFridayDate(dateVal);
+      const splits = splitNormalOt(hoursData.totalHours, isFriday);
+      
+      let html = `
+        <div style="font-size: 11.5px; background: var(--accent-tint); color: var(--accent-dark); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 10px; margin-top: 5px;">
+          <strong>Preview:</strong> <span>${hoursData.totalHours.toFixed(2)} hrs total</span>
+      `;
+      
+      if (splits.isFridayOvertime) {
+        html += ` | <span style="color: #92400e; font-weight: bold;">Friday Rest Day (100% OT): ${splits.ot.toFixed(2)} hrs OT</span>`;
+      } else {
+        html += ` | <span>Normal: ${splits.normal.toFixed(2)} hrs</span> | <span>OT: ${splits.ot.toFixed(2)} hrs</span>`;
+      }
+      
+      if (hoursData.overnight) {
+        html += `<div style="margin-top: 3px; font-weight: bold; color: var(--error);">🌙 Overnight Shift (crosses midnight)</div>`;
+      }
+      
+      if (splits.isFridayOvertime) {
+        html += `<div style="margin-top: 3px; font-size: 10px; color: var(--muted);">ℹ️ Friday counts as overtime in report calculations.</div>`;
+      }
+      
+      html += `</div>`;
+      container.innerHTML = html;
+    }
+
+    function updateSinglePreview() {
+      const previewContainer = document.getElementById('singlePreviewContainer');
+      renderHoursPreview(previewContainer, dateInput.value, startInput.value, endInput.value);
+    }
+
+    function updateAllPreviews() {
+      updateSinglePreview();
+      const bulkShifts = document.querySelectorAll('.shift-row-card');
+      bulkShifts.forEach(rowDiv => {
+        const parentGroup = rowDiv.closest('.date-group');
+        const dateVal = parentGroup ? parentGroup.querySelector('.group-date-val').value : '';
+        const shiftStart = rowDiv.querySelector('.shift-start').value;
+        const shiftEnd = rowDiv.querySelector('.shift-end').value;
+        const previewContainer = rowDiv.querySelector('.shift-preview-container');
+        renderHoursPreview(previewContainer, dateVal, shiftStart, shiftEnd);
+      });
+    }
+
+    // --- Batch Summary Calculation ---
+
+    function updateBatchSummary() {
+      const summaryContainer = document.getElementById('batchSummaryBar');
+      if (!summaryContainer) return;
+      
+      if (currentMode !== 'bulk') {
+        summaryContainer.style.display = 'none';
+        return;
+      }
+      
+      let totalShifts = 0;
+      let totalHours = 0;
+      const uniqueEmps = new Set();
+      
+      const groups = document.querySelectorAll('.date-group');
+      groups.forEach(group => {
+        const dateVal = group.querySelector('.group-date-val').value;
+        const shiftRows = group.querySelectorAll('.shift-row-card');
+        shiftRows.forEach(row => {
+          const emps = row.getEmployeeColumns ? row.getEmployeeColumns() : [];
+          const startTime = row.querySelector('.shift-start').value;
+          const endTime = row.querySelector('.shift-end').value;
+          
+          const hoursData = computeClientHours(startTime, endTime);
+          if (hoursData) {
+            const empCount = emps.length;
+            totalShifts += empCount;
+            totalHours += hoursData.totalHours * empCount;
+            emps.forEach(c => uniqueEmps.add(c));
+          }
+        });
+      });
+      
+      if (totalShifts === 0) {
+        summaryContainer.style.display = 'none';
+        return;
+      }
+      
+      summaryContainer.style.display = 'block';
+      summaryContainer.innerHTML = `
+        <div style="background: var(--accent-tint); border: 1.5px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--accent-dark); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+          <div>
+            <strong>📊 Batch Summary:</strong> 
+            <span>${totalShifts} shift entries</span> for 
+            <span>${uniqueEmps.size} employee(s)</span>
+          </div>
+          <div style="font-size: 13px; font-weight: bold; background: var(--card); border: 1px solid var(--accent); padding: 4px 8px; border-radius: 6px;">
+            ${totalHours.toFixed(1)} hrs total
+          </div>
+        </div>
+      `;
+    }
+
+    // --- Form Configuration Listeners ---
+
+    dateInput.addEventListener('change', function () {
+      updateSinglePreview();
+      var badge = document.getElementById('fridayBadge');
+      if (badge) badge.style.display = isFridayDate(dateInput.value) ? 'inline' : 'none';
+    });
+    startInput.addEventListener('change', updateSinglePreview);
+    endInput.addEventListener('change', updateSinglePreview);
+
+    var validateSingleBlur = debounce(function () {
+      clearFieldErrors();
+      if (currentMode !== 'single') return;
+      if (dateInput.value && startInput.value && endInput.value) return;
+      if (!dateInput.value) markError(dateInput, 'Date required.');
+      if (!startInput.value) markError(startInput, 'Start time required.');
+      if (!endInput.value) markError(endInput, 'End time required.');
+    }, 400);
+    dateInput.addEventListener('blur', validateSingleBlur);
+    startInput.addEventListener('blur', validateSingleBlur);
+    endInput.addEventListener('blur', validateSingleBlur);
+
+    singleModeBtn.addEventListener('click', function() {
+      currentMode = 'single';
+      singleModeBtn.classList.add('active');
+      bulkModeBtn.classList.remove('active');
+      singleFields.style.display = 'block';
+      bulkFields.style.display = 'none';
+      updateSinglePreview();
+      updateBatchSummary();
+      clearStatus();
+    });
+
+    bulkModeBtn.addEventListener('click', function() {
+      currentMode = 'bulk';
+      bulkModeBtn.classList.add('active');
+      singleModeBtn.classList.remove('active');
+      singleFields.style.display = 'none';
+      bulkFields.style.display = 'block';
+      updateBatchSummary();
+      clearStatus();
+      
+      const groups = document.querySelectorAll('.date-group');
+      if (groups.length === 0) {
+        addDateGroup();
+      }
+    });
+
+    // --- Bulk Group and Shift Manipulation ---
+
+    function addDateGroup(dateVal, options = {}) {
+      dateGroupCount++;
+      const uniqueGroupId = dateGroupCount;
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'date-group';
+      groupDiv.id = 'dateGroup_' + uniqueGroupId;
+      
+      groupDiv.innerHTML = `
+        <div class="date-group-header">
+          <span class="date-group-title">Date Group #${uniqueGroupId}</span>
+          <div class="date-group-actions">
+            <button type="button" class="btn-group-action btn-duplicate" onclick="duplicateDateGroup(${uniqueGroupId})">Duplicate</button>
+            <button type="button" class="btn-group-action btn-remove-group" onclick="removeDateGroup(${uniqueGroupId})">Delete</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <input type="date" class="group-date-val" required>
+        </div>
+        <div class="shift-rows-list" id="shiftList_${uniqueGroupId}"></div>
+        <button type="button" class="btn-helper" id="addShiftBtn_${uniqueGroupId}">
+          👤 Add Employee Shift
+        </button>
+      `;
+      
+      dateGroupsContainer.appendChild(groupDiv);
+      const dateInputEl = groupDiv.querySelector('.group-date-val');
+      dateInputEl.value = dateVal || new Date().toISOString().slice(0, 10);
+      
+      dateInputEl.addEventListener('change', () => {
+        updateAllPreviews();
+        updateBatchSummary();
+      });
+      dateInputEl.addEventListener('blur', debounce(function () {
+        if (!this.value) markError(this, 'Date required.');
+      }, 400));
+
+      const shiftListDiv = document.getElementById('shiftList_' + uniqueGroupId);
+      const addShiftBtn = document.getElementById('addShiftBtn_' + uniqueGroupId);
+      
+      if (!options.skipDefaultShift) {
+        addShiftRow(shiftListDiv, uniqueGroupId);
+      }
+      
+      addShiftBtn.addEventListener('click', function() {
+        addShiftRow(shiftListDiv, uniqueGroupId);
+        updateBatchSummary();
+      });
+
+      reindexDateGroups();
+      return { groupDiv, shiftListDiv, uniqueGroupId };
+    }
+
+    addDateGroupBtn.addEventListener('click', () => {
+      addDateGroup();
+      updateBatchSummary();
+    });
+
+    window.removeDateGroup = function(id) {
+      const group = document.getElementById('dateGroup_' + id);
+      if (group) {
+        const allGroups = document.querySelectorAll('.date-group');
+        if (allGroups.length <= 1) {
+          showStatus('error', 'You must maintain at least one bulk Date Group.');
+          return;
+        }
+        group.remove();
+        reindexDateGroups();
+        updateBatchSummary();
+        clearStatus();
+      }
+    };
+
+    window.duplicateDateGroup = function(id) {
+      const sourceGroup = document.getElementById('dateGroup_' + id);
+      if (!sourceGroup) return;
+      
+      const sourceDate = sourceGroup.querySelector('.group-date-val').value;
+      const newGroupInfo = addDateGroup(sourceDate, { skipDefaultShift: true });
+      
+      const sourceShifts = sourceGroup.querySelectorAll('.shift-row-card');
+      sourceShifts.forEach(sourceRow => {
+        const startVal = sourceRow.querySelector('.shift-start').value;
+        const endVal = sourceRow.querySelector('.shift-end').value;
+        const jobVal = sourceRow.querySelector('.shift-job').value;
+        
+        const newRowDiv = addShiftRow(newGroupInfo.shiftListDiv, newGroupInfo.uniqueGroupId, {
+          startTime: startVal,
+          endTime: endVal,
+          jobOrder: jobVal
+        });
+        
+        if (sourceRow.selectedColsSet && newRowDiv.selectedColsSet) {
+          sourceRow.selectedColsSet.forEach(col => {
+            newRowDiv.selectedColsSet.add(col);
+          });
+          if (newRowDiv.selectorApi) {
+            newRowDiv.selectorApi.refresh();
+          }
+        }
+      });
+      
+      updateAllPreviews();
+      updateBatchSummary();
+      clearStatus();
+    };
+
+    function reindexDateGroups() {
+      const groups = document.querySelectorAll('.date-group');
+      groups.forEach((group, index) => {
+        group.querySelector('.date-group-title').textContent = 'Date Group #' + (index + 1);
+      });
+    }
+
+    function addShiftRow(container, groupId, initialData = {}) {
+      const rowId = 'shiftRow_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'shift-row-card';
+      rowDiv.id = rowId;
+      rowDiv.selectedColsSet = new Set(); 
+
+      rowDiv.innerHTML = `
+        <div class="shift-row-header">
+          <span class="shift-row-title">Shift Details</span>
+          <button type="button" class="btn-remove-shift" onclick="removeShiftRow('${rowId}', ${groupId})">×</button>
+        </div>
+        <div class="field" style="margin-bottom: 8px;">
+          <label>Employees</label>
+          <div class="bulk-search-selector-container"></div>
+          <button type="button" class="bulk-add-all-btn" style="font-size: 10.5px; background: none; border: 1px dashed var(--accent); color: var(--accent-dark); border-radius: 4px; padding: 2px 8px; margin-top: 4px; cursor: pointer; display: none;">+ Add all employees</button>
+        </div>
+        <div class="row" style="gap: 8px; margin-bottom: 4px;">
+          <div class="field" style="margin-bottom: 0;">
+            <label>Start</label>
+            <input type="time" class="shift-start" required>
+          </div>
+          <div class="field" style="margin-bottom: 0;">
+            <label>End</label>
+            <input type="time" class="shift-end" required>
+          </div>
+        </div>
+        <div class="ov-wrap" style="font-size:10.5px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:4px;"></div>
+        <div class="shift-preview-container" style="margin-bottom: 8px;"></div>
+        <div class="field" style="margin-bottom: 0;">
+          <label>Job Order</label>
+          <input type="text" class="shift-job" list="jobOrderList" placeholder="e.g. AKCC, SAIPEM">
+        </div>
+      `;
+      
+      container.appendChild(rowDiv);
+
+      const bulkSelectorContainer = rowDiv.querySelector('.bulk-search-selector-container');
+      const shiftStart = rowDiv.querySelector('.shift-start');
+      const shiftEnd = rowDiv.querySelector('.shift-end');
+      
+      if (initialData.startTime) shiftStart.value = initialData.startTime;
+      if (initialData.endTime) shiftEnd.value = initialData.endTime;
+      if (initialData.jobOrder) rowDiv.querySelector('.shift-job').value = initialData.jobOrder;
+
+      const previewContainer = rowDiv.querySelector('.shift-preview-container');
+      const updatePreview = () => {
+        const parentGroup = rowDiv.closest('.date-group');
+        const dateVal = parentGroup ? parentGroup.querySelector('.group-date-val').value : '';
+        renderHoursPreview(previewContainer, dateVal, shiftStart.value, shiftEnd.value);
+      };
+      
+      shiftStart.addEventListener('change', () => { updatePreview(); updateBatchSummary(); });
+      shiftEnd.addEventListener('change', () => { updatePreview(); updateBatchSummary(); });
+      shiftStart.addEventListener('blur', debounce(function () {
+        if (!this.value) markError(this, 'Required.');
+      }, 400));
+      shiftEnd.addEventListener('blur', debounce(function () {
+        if (!this.value) markError(this, 'Required.');
+      }, 400));
+
+      var ovWrap = rowDiv.querySelector('.ov-wrap');
+      if (ovWrap) {
+        addOvernightCheckbox(ovWrap, shiftEnd);
+      }
+
+      let selector = null;
+      if (ALL_EMPLOYEES.length > 0) {
+        selector = createSearchableSelector(bulkSelectorContainer, rowDiv.selectedColsSet, () => {
+          updateBatchSummary();
+        });
+        rowDiv.selectorApi = selector;
+        rowDiv.getEmployeeColumns = () => selector.getSelection();
+        var addAllBtn = rowDiv.querySelector('.bulk-add-all-btn');
+        if (addAllBtn) {
+          addAllBtn.style.display = '';
+          addAllBtn.onclick = function () {
+            ALL_EMPLOYEES.forEach(function (emp) { rowDiv.selectedColsSet.add(emp.column); });
+            selector.refresh();
+            updateBatchSummary();
+          };
+        }
+      } else {
+        bulkSelectorContainer.innerHTML = '<div style="font-size:12px; color:var(--muted)">Loading search directory...</div>';
+        rowDiv.getEmployeeColumns = () => [];
+      }
+      
+      updatePreview();
+      return rowDiv;
+    }
+
+    window.removeShiftRow = function(rowId, groupId) {
+      const row = document.getElementById(rowId);
+      if (row) {
+        const parentContainer = document.getElementById('shiftList_' + groupId);
+        const remainingShifts = parentContainer.querySelectorAll('.shift-row-card');
+        if (remainingShifts.length <= 1) {
+          showStatus('error', 'Each Date Group requires at least one Employee Shift.');
+          return;
+        }
+        row.remove();
+        updateBatchSummary();
+        clearStatus();
+      }
+    };
+
+    // --- Search Dropdown Engine ---
+
+    function createSearchableSelector(containerElement, selectedColsSet, onUpdate) {
+      const chipsContainer = document.createElement('div');
+      chipsContainer.className = 'chips-list';
+      
+      const wrapper = document.createElement('div');
+      wrapper.className = 'search-dropdown-wrapper';
+      
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'search-input';
+      input.placeholder = 'Search employee...';
+      
+      const panel = document.createElement('div');
+      panel.className = 'dropdown-panel';
+      panel.style.display = 'none';
+      
+      wrapper.appendChild(input);
+      wrapper.appendChild(panel);
+      
+      containerElement.appendChild(chipsContainer);
+      containerElement.appendChild(wrapper);
+      
+      function renderChips() {
+        chipsContainer.innerHTML = '';
+        selectedColsSet.forEach(col => {
+          const emp = ALL_EMPLOYEES.find(e => e.column === col);
+          if (emp) {
+            const chip = document.createElement('div');
+            chip.className = 'chip';
+            chip.dataset.col = col;
+            chip.innerHTML = `${emp.name} <span class="remove-chip-btn">&times;</span>`;
+            chip.querySelector('.remove-chip-btn').addEventListener('click', () => {
+              selectedColsSet.delete(col);
+              renderChips();
+              if (onUpdate) onUpdate();
+            });
+            chipsContainer.appendChild(chip);
+          }
+        });
+      }
+      
+      function renderOptions(filterText = '') {
+        panel.innerHTML = '';
+        const query = filterText.toLowerCase().trim();
+        
+        const available = ALL_EMPLOYEES.filter(emp => {
+          const matchesQuery = emp.name.toLowerCase().includes(query);
+          const notSelected = !selectedColsSet.has(emp.column);
+          return matchesQuery && notSelected;
+        });
+        
+        if (available.length === 0) {
+          const noResult = document.createElement('div');
+          noResult.className = 'dropdown-item-disabled';
+          noResult.textContent = 'No employees found';
+          panel.appendChild(noResult);
+          return;
+        }
+        
+        available.forEach(emp => {
+          const opt = document.createElement('div');
+          opt.className = 'dropdown-item';
+          opt.textContent = emp.name;
+          opt.addEventListener('click', () => {
+            selectedColsSet.add(emp.column);
+            renderChips();
+            input.value = '';
+            panel.style.display = 'none';
+            if (onUpdate) onUpdate();
+          });
+          panel.appendChild(opt);
+        });
+      }
+      
+      input.addEventListener('focus', () => {
+        renderOptions(input.value);
+        panel.style.display = 'block';
+      });
+      
+      input.addEventListener('input', () => {
+        renderOptions(input.value);
+      });
+      
+      document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+          panel.style.display = 'none';
+        }
+      });
+      
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+        }
+      });
+      
+      renderChips();
+      
+      return {
+        refresh: () => {
+          renderChips();
+          renderOptions(input.value);
+        },
+        getSelection: () => Array.from(selectedColsSet),
+        clear: () => {
+          selectedColsSet.clear();
+          renderChips();
+        }
+      };
+    }
+
+    // --- Employee Fuzzy Matching Engine ---
+
+    function findEmployeeByFuzzyMatch(query) {
+      if (!query) return null;
+      const normalizedQuery = query.trim().toLowerCase().replace(/\s+/g, ' ');
+      if (!normalizedQuery) return null;
+
+      // 1. Exact match (normalized whitespace)
+      let matches = ALL_EMPLOYEES.filter(e => e.name.trim().toLowerCase().replace(/\s+/g, ' ') === normalizedQuery);
+      if (matches.length === 1) return matches[0];
+
+      // 2. Prefix match
+      matches = ALL_EMPLOYEES.filter(e => e.name.trim().toLowerCase().replace(/\s+/g, ' ').startsWith(normalizedQuery));
+      if (matches.length === 1) return matches[0];
+
+      // 3. Substring match
+      matches = ALL_EMPLOYEES.filter(e => e.name.trim().toLowerCase().includes(normalizedQuery));
+      if (matches.length === 1) return matches[0];
+
+      // 4. Token-based match
+      const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+      if (queryTokens.length > 0) {
+        const tokenMatches = ALL_EMPLOYEES.filter(emp => {
+          const empNameLower = emp.name.toLowerCase();
+          const empTokens = empNameLower.split(' ').filter(Boolean);
+          return queryTokens.every(qToken => {
+            return empTokens.some(eToken => eToken.startsWith(qToken));
+          });
+        });
+        if (tokenMatches.length === 1) return tokenMatches[0];
+      }
+
+      return null;
+    }
+
+    function findJobByFuzzyMatch(query, suggestions) {
+      if (!query) return '';
+      const normalizedQuery = query.trim().toLowerCase();
+      const exact = suggestions.find(s => s.toLowerCase() === normalizedQuery);
+      if (exact) return exact;
+      
+      const contains = suggestions.find(s => s.toLowerCase().includes(normalizedQuery) || normalizedQuery.includes(s.toLowerCase()));
+      if (contains) return contains;
+      
+      return query; // Fallback to raw extracted job
+    }
+
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // --- Collapsible AI Import Functions ---
+
+    aiPanelHeader.addEventListener('click', () => {
+      if (aiPanelBody.style.display === 'none') {
+        aiPanelBody.style.display = 'block';
+        aiToggleIcon.textContent = '▲';
+      } else {
+        aiPanelBody.style.display = 'none';
+        aiToggleIcon.textContent = '▼';
+      }
+    });
+
+    // ---- Image handling ----
+    aiImageBtn.addEventListener('click', function () {
+      aiImageInput.click();
+    });
+
+    aiImageInput.addEventListener('change', function () {
+      if (aiImageInput.files && aiImageInput.files[0]) {
+        handleImageFile(aiImageInput.files[0]);
+      }
+    });
+
+    aiInputText.addEventListener('paste', function (e) {
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf('image') !== -1) {
+          e.preventDefault();
+          handleImageFile(items[i].getAsFile());
+          return;
+        }
+      }
+    });
+
+    aiImageRemoveBtn.addEventListener('click', function () {
+      clearImage();
+    });
+
+    function handleImageFile(file) {
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          var canvas = document.createElement('canvas');
+          var maxW = 1200;
+          var scale = Math.min(1, maxW / img.width);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          var dataUrl = canvas.toDataURL(file.type || 'image/png');
+          currentImageBase64 = dataUrl.split(',')[1];
+          currentImageMimeType = file.type || 'image/png';
+          aiImagePreviewImg.src = dataUrl;
+          aiImagePreview.style.display = 'block';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearImage() {
+      currentImageBase64 = null;
+      currentImageMimeType = null;
+      aiImagePreview.style.display = 'none';
+      aiImagePreviewImg.src = '';
+      aiImageInput.value = '';
+    }
+
+    // ---- Cancel AI ----
+    aiCancelBtn.addEventListener('click', function () {
+      aiCancelled = true;
+      setAiLoading(false);
+      showAiStatus('warn', 'Cancelled by user.');
+    });
+
+    // ---- AI Parse button ----
+    aiParseBtn.addEventListener('click', () => {
+      const text = aiInputText.value.trim();
+      if (!text && !currentImageBase64) {
+        showAiStatus('error', 'Please enter text or paste a screenshot first.');
+        return;
+      }
+      
+      aiCancelled = false;
+      setAiLoading(true, 'Sending to AI...');
+      var progressTimers = [
+        setTimeout(function () { updateAiStatusText('QuickFill is processing...'); }, 3000),
+        setTimeout(function () { updateAiStatusText('Still working... this can take 20-60s'); }, 10000),
+        setTimeout(function () { updateAiStatusText('Almost done...'); }, 25000)
+      ];
+
+      var withImage = !!currentImageBase64;
+      var serverFn = withImage ? 'parseNaturalLanguageEntriesWithImage' : 'parseNaturalLanguageEntries';
+      var timeoutMs = withImage ? 120000 : 55000;
+
+      var timedOut = false;
+      var timeoutTimer = setTimeout(function () {
+        timedOut = true;
+        if (!aiCancelled) {
+          setAiLoading(false);
+          showAiStatus('error', 'QuickFill request timed out after ' + Math.round(timeoutMs / 1000) + 's.');
+        }
+      }, timeoutMs);
+
+      var runner = google.script.run
+        .withSuccessHandler(function (result) {
+          if (timedOut) return;
+          clearTimeout(timeoutTimer);
+          progressTimers.forEach(function (t) { clearTimeout(t); });
+          if (!aiCancelled) handleAiParseResult(result);
+        })
+        .withFailureHandler(function (err) {
+          if (timedOut) return;
+          clearTimeout(timeoutTimer);
+          progressTimers.forEach(function (t) { clearTimeout(t); });
+          if (!aiCancelled) {
+            setAiLoading(false);
+            showAiStatus('error', err.message || String(err));
+          }
+        });
+
+      if (withImage) {
+        runner[serverFn](text, currentImageBase64, currentImageMimeType, ACTIVE_SHEET_NAME);
+      } else {
+        runner[serverFn](text, ACTIVE_SHEET_NAME);
+      }
+    });
+
+    function setAiLoading(isLoading, statusText) {
+      aiParseBtn.disabled = isLoading;
+      aiParseBtn.innerHTML = isLoading 
+        ? '<span class="spinner" style="border-top-color: var(--accent-dark); border-left-color: var(--accent-dark); width: 12px; height: 12px;"></span> <span id="aiStatusText">' + (statusText || 'Parsing...') + '</span>'
+        : '✨ Parse Shift Notes';
+      aiCancelBtn.style.display = isLoading ? 'block' : 'none';
+    }
+
+    function updateAiStatusText(text) {
+      var el = document.getElementById('aiStatusText');
+      if (el) el.textContent = text;
+    }
+
+    function showAiStatus(type, message) {
+      aiStatusBox.className = 'status-box ' + type;
+      aiStatusBox.innerHTML = message;
+    }
+
+    function clearAiStatus() {
+      aiStatusBox.className = 'status-box';
+      aiStatusBox.innerHTML = '';
+    }
+
+    function handleAiParseResult(result) {
+      setAiLoading(false);
+      clearAiStatus();
+      
+      if (!result.success) {
+        showAiStatus('error', escapeHtml(result.error));
+        return;
+      }
+      
+      processAiEntriesAndPopulate(result.entries);
+      
+      let statusMsg = '<strong>✓ Successfully parsed shift notes!</strong>';
+      if (result.warnings && result.warnings.length > 0) {
+        statusMsg += '<div style="margin-top: 6px; text-align: left; max-height: 100px; overflow-y: auto; font-size: 11px;">';
+        statusMsg += '<strong>Warnings:</strong><ul style="margin: 3px 0; padding-left: 15px;">';
+        result.warnings.forEach(w => {
+          statusMsg += '<li>' + escapeHtml(w) + '</li>';
+        });
+        statusMsg += '</ul></div>';
+        showAiStatus('warn', statusMsg);
+      } else {
+        showAiStatus('success', statusMsg + '<br><span style="font-size: 11px;">The bulk mode fields have been populated below. Please review before saving.</span>');
+      }
+    }
+
+    function processAiEntriesAndPopulate(entries) {
+      currentMode = 'bulk';
+      bulkModeBtn.classList.add('active');
+      singleModeBtn.classList.remove('active');
+      singleFields.style.display = 'none';
+      bulkFields.style.display = 'block';
+      clearStatus();
+      
+      dateGroupsContainer.innerHTML = '';
+      dateGroupCount = 0;
+      
+      const groupsByDate = {};
+      entries.forEach(entry => {
+        if (!groupsByDate[entry.date]) {
+          groupsByDate[entry.date] = [];
+        }
+        groupsByDate[entry.date].push(entry);
+      });
+      
+      const jobSuggestions = [];
+      const options = document.querySelectorAll('#jobOrderList option');
+      options.forEach(opt => jobSuggestions.push(opt.value));
+      
+      Object.keys(groupsByDate).sort().forEach(date => {
+        const rawShiftsForDate = groupsByDate[date];
+        const mergedShifts = [];
+        
+        rawShiftsForDate.forEach(entry => {
+          const resolvedJob = findJobByFuzzyMatch(entry.jobOrder, jobSuggestions);
+          const existing = mergedShifts.find(m => m.startTime === entry.startTime && m.endTime === entry.endTime && m.jobOrder === resolvedJob);
+          
+          const resolvedCols = [];
+          const unmatchedNames = [];
+          entry.employees.forEach(empName => {
+            const matchedEmp = findEmployeeByFuzzyMatch(empName);
+            if (matchedEmp) {
+              resolvedCols.push({ col: matchedEmp.column, name: matchedEmp.name });
+            } else {
+              unmatchedNames.push(empName);
+            }
+          });
+          
+          if (existing) {
+            resolvedCols.forEach(c => {
+              if (!existing.employeeCols.some(ec => ec.col === c.col)) {
+                existing.employeeCols.push(c);
+              }
+            });
+            unmatchedNames.forEach(name => {
+              if (!existing.unmatchedNames.includes(name)) {
+                existing.unmatchedNames.push(name);
+              }
+            });
+            if (entry.note) {
+              existing.notes.push(entry.note);
+            }
+          } else {
+            mergedShifts.push({
+              startTime: entry.startTime,
+              endTime: entry.endTime,
+              jobOrder: resolvedJob,
+              employeeCols: resolvedCols,
+              unmatchedNames: unmatchedNames,
+              notes: entry.note ? [entry.note] : []
+            });
+          }
+        });
+        
+        const groupInfo = addDateGroup(date, { skipDefaultShift: true });
+        
+        mergedShifts.forEach(shiftData => {
+          const rowDiv = addShiftRow(groupInfo.shiftListDiv, groupInfo.uniqueGroupId, {
+            startTime: shiftData.startTime,
+            endTime: shiftData.endTime,
+            jobOrder: shiftData.jobOrder
+          });
+          
+          shiftData.employeeCols.forEach(c => {
+            rowDiv.selectedColsSet.add(c.col);
+          });
+          
+          rowDiv.classList.add('ai-populated');
+          
+          if (rowDiv.selectorApi) {
+            rowDiv.selectorApi.refresh();
+          }
+          
+          if (shiftData.unmatchedNames.length > 0 || shiftData.notes.length > 0) {
+            const feedbackDiv = document.createElement('div');
+            feedbackDiv.className = 'ai-shift-feedback';
+            
+            let feedbackHtml = '';
+            if (shiftData.unmatchedNames.length > 0) {
+              feedbackHtml += `<div style="color: var(--error); margin-bottom: 2px;">⚠️ Unmatched names: <strong>${shiftData.unmatchedNames.map(escapeHtml).join(', ')}</strong> (please search and add manually)</div>`;
+            }
+            if (shiftData.notes.length > 0) {
+              feedbackHtml += `<div style="color: #92400e; font-style: italic;">💡 QuickFill Notes: ${shiftData.notes.map(escapeHtml).join(' | ')}</div>`;
+            }
+            feedbackDiv.innerHTML = feedbackHtml;
+            rowDiv.appendChild(feedbackDiv);
+          }
+        });
+      });
+      
+      document.querySelectorAll('.ai-populated input, .ai-populated .search-input').forEach(el => {
+        el.addEventListener('input', function removeAiClass(e) {
+          const card = e.target.closest('.ai-populated');
+          if (card) {
+            card.classList.remove('ai-populated');
+          }
+          el.removeEventListener('input', removeAiClass);
+        });
+      });
+      
+      updateAllPreviews();
+      updateBatchSummary();
+    }
+
+    // --- Status Boxes and Controls ---
+
+    function showStatus(type, message) {
+      statusBox.className = 'status-box ' + type;
+      statusBox.innerHTML = message;
+      if (type === 'success') autoDismissSuccess(statusBox);
+    }
+    
+    function clearStatus() {
+      statusBox.className = 'status-box';
+      statusBox.innerHTML = '';
+    }
+
+    // --- Employee & Job Loading Procedures ---
+
+    function loadEmployees() {
+      const container = document.getElementById('singleSearchSelectorContainer');
+      container.innerHTML = '<div style="font-size:12px; color:var(--muted)">Loading employees…</div>';
+      google.script.run
+        .withSuccessHandler(renderEmployees)
+        .withFailureHandler(function (err) {
+          container.innerHTML = '<div style="font-size:12px; color:var(--muted)">Could not load employees.</div>';
+          showStatus('error', err.message || String(err));
+        })
+        .getEmployeesForSheet(ACTIVE_SHEET_NAME);
+    }
+
+    function renderEmployees(result) {
+      if (result.error) {
+        document.getElementById('singleSearchSelectorContainer').innerHTML = 
+          '<div style="font-size:12px; color:var(--muted)">' + result.error + '</div>';
+        return;
+      }
+      
+      ALL_EMPLOYEES = result.employees;
+      
+      const singleContainer = document.getElementById('singleSearchSelectorContainer');
+      singleContainer.innerHTML = '';
+      singleSelector = createSearchableSelector(singleContainer, singleSelectedCols);
+
+      const bulkContainers = document.querySelectorAll('.bulk-search-selector-container');
+      bulkContainers.forEach(container => {
+        container.innerHTML = '';
+        const parentCard = container.closest('.shift-row-card');
+        if (parentCard && parentCard.selectedColsSet) {
+          const selector = createSearchableSelector(container, parentCard.selectedColsSet, () => {
+            updateBatchSummary();
+          });
+          parentCard.selectorApi = selector;
+          parentCard.getEmployeeColumns = () => selector.getSelection();
+        }
+      });
+
+      loadJobOrders();
+    }
+
+    function loadJobOrders() {
+      google.script.run
+        .withSuccessHandler(function (list) {
+          const datalist = document.getElementById('jobOrderList');
+          datalist.innerHTML = '';
+          list.forEach(function (jo) {
+            const opt = document.createElement('option');
+            opt.value = jo;
+            datalist.appendChild(opt);
+          });
+        })
+        .withFailureHandler(function () {})
+        .getJobOrderSuggestions();
+    }
+
+    function getSelectedColumns() {
+      return singleSelector ? singleSelector.getSelection() : [];
+    }
+
+    // --- Validation and Submission Engine ---
+
+    function clearFieldErrors() {
+      document.querySelectorAll('.field-error-inline').forEach(el => el.remove());
+      document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
+    }
+
+    function markError(el, msg) {
+      el.classList.add('input-error');
+      const err = document.createElement('div');
+      err.className = 'field-error-inline';
+      err.style.cssText = 'font-size: 11px; color: var(--error); margin-top: 4px;';
+      err.textContent = msg;
+      el.parentNode.appendChild(err);
+    }
+
+    function validateClientSide() {
+      clearFieldErrors();
+      if (currentMode === 'single') {
+        let valid = true;
+        if (getSelectedColumns().length === 0) {
+          showStatus('error', 'Please select at least one employee.');
+          valid = false;
+        }
+        if (!dateInput.value) {
+          markError(dateInput, 'Please select a date.');
+          valid = false;
+        }
+        if (!startInput.value) {
+          markError(startInput, 'Start time is required.');
+          valid = false;
+        }
+        if (!endInput.value) {
+          markError(endInput, 'End time is required.');
+          valid = false;
+        }
+        return valid ? null : 'Fix the highlighted fields above.';
+      } else {
+        const groups = document.querySelectorAll('.date-group');
+        if (groups.length === 0) return 'Please add at least one Date Group.';
+        
+        for (let g = 0; g < groups.length; g++) {
+          const group = groups[g];
+          const dateVal = group.querySelector('.group-date-val');
+          if (!dateVal.value) {
+            markError(dateVal, 'Pick a date.');
+            continue;
+          }
+          
+          const shiftRows = group.querySelectorAll('.shift-row-card');
+          if (shiftRows.length === 0) return 'Date Group #' + (g + 1) + ': Add at least one Shift Row.';
+          
+          for (let s = 0; s < shiftRows.length; s++) {
+            const row = shiftRows[s];
+            if (!row.getEmployeeColumns || row.getEmployeeColumns().length === 0) {
+              const firstInput = row.querySelector('input');
+              if (firstInput) markError(firstInput, 'Select at least one employee.');
+            }
+            const startVal = row.querySelector('.shift-start');
+            const endVal = row.querySelector('.shift-end');
+            if (!startVal.value) markError(startVal, 'Required.');
+            if (!endVal.value) markError(endVal, 'Required.');
+          }
+        }
+        const hasErrors = document.querySelectorAll('.input-error').length > 0;
+        return hasErrors ? 'Fix the highlighted fields above.' : null;
+      }
+    }
+
+    function buildPayload(confirmFlags) {
+      if (currentMode === 'single') {
+        return Object.assign({
+          sheetName: ACTIVE_SHEET_NAME,
+          date: dateInput.value,
+          startTime: startInput.value,
+          endTime: endInput.value,
+          jobOrder: jobOrderInput.value,
+          employeeColumns: getSelectedColumns()
+        }, confirmFlags || {});
+      } else {
+        const flatEntries = [];
+        const groups = document.querySelectorAll('.date-group');
+        
+        groups.forEach(group => {
+          const groupDate = group.querySelector('.group-date-val').value;
+          const shiftRows = group.querySelectorAll('.shift-row-card');
+          
+          shiftRows.forEach(row => {
+            const cols = row.getEmployeeColumns();
+            const startVal = row.querySelector('.shift-start').value;
+            const endVal = row.querySelector('.shift-end').value;
+            const jobVal = row.querySelector('.shift-job').value;
+            
+            cols.forEach(col => {
+              flatEntries.push({
+                date: groupDate,
+                employeeColumn: col,
+                startTime: startVal,
+                endTime: endVal,
+                jobOrder: jobVal
+              });
+            });
+          });
+        });
+
+        return Object.assign({
+          sheetName: ACTIVE_SHEET_NAME,
+          entries: flatEntries
+        }, confirmFlags || {});
+      }
+    }
+
+    function buildConfirmEntriesTable(payload) {
+      let flat = [];
+      if (currentMode === 'single') {
+        (payload.employeeColumns || []).forEach(col => {
+          flat.push({ column: col, date: payload.date, startTime: payload.startTime, endTime: payload.endTime });
+        });
+      } else {
+        flat = payload.entries || [];
+      }
+      if (flat.length === 0) return '';
+
+      const rowsHtml = flat.map(e => {
+        const emp = ALL_EMPLOYEES.find(x => x.column === e.column || x.column === e.employeeColumn);
+        const name = emp ? emp.name : ('Col ' + (e.column || e.employeeColumn));
+        const hoursData = computeClientHours(e.startTime, e.endTime);
+        const splits = hoursData ? splitNormalOt(hoursData.totalHours, isFridayDate(e.date)) : { ot: 0 };
+        return '<tr>' +
+          '<td style="padding:4px 8px;">' + escapeHtml(name) + '</td>' +
+          '<td style="padding:4px 8px;">' + escapeHtml(e.date) + '</td>' +
+          '<td style="padding:4px 8px;">' + escapeHtml(e.startTime) + '</td>' +
+          '<td style="padding:4px 8px;">' + escapeHtml(e.endTime) + '</td>' +
+          '<td style="padding:4px 8px;text-align:right;">' + splits.ot.toFixed(2) + '</td>' +
+          '</tr>';
+      }).join('');
+
+      return '<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:10px;">' +
+        '<thead><tr style="border-bottom:1px solid var(--accent);text-align:left;">' +
+        '<th style="padding:4px 8px;">Employee</th><th style="padding:4px 8px;">Date</th>' +
+        '<th style="padding:4px 8px;">Start</th><th style="padding:4px 8px;">End</th>' +
+        '<th style="padding:4px 8px;text-align:right;">OT hrs</th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody></table>';
+    }
+
+    function setLoading(isLoading, label) {
+      submitBtn.disabled = isLoading;
+      submitBtn.innerHTML = isLoading
+        ? '<span class="spinner"></span>' + (label || 'Saving…')
+        : 'Save Entry';
+    }
+
+    let lastSubmitPayload = null;
+
+    function doSubmit(confirmFlags) {
+      setLoading(true);
+      const payload = buildPayload(confirmFlags);
+      lastSubmitPayload = payload;
+
+      if (currentMode === 'single') {
+        google.script.run
+          .withSuccessHandler(handleResult)
+          .withFailureHandler(function (err) {
+            setLoading(false);
+            showStatus('error', err.message || String(err));
+          })
+          .submitTimeEntry(payload);
+      } else {
+        google.script.run
+          .withSuccessHandler(handleResult)
+          .withFailureHandler(function (err) {
+            setLoading(false);
+            showStatus('error', err.message || String(err));
+          })
+          .submitBulkTimeEntries(payload);
+      }
+    }
+
+    function handleResult(result) {
+      setLoading(false);
+
+      if (result.success) {
+        showStatus('success', '✓ ' + escapeHtml(result.message));
+        clearFieldErrors();
+
+        const today = new Date().toISOString().slice(0, 10);
+        dateInput.value = today;
+        startInput.value = '';
+        endInput.value = '';
+        jobOrderInput.value = '';
+        if (singleSelector) singleSelector.clear();
+
+        dateGroupsContainer.innerHTML = '';
+        dateGroupCount = 0;
+        if (currentMode === 'bulk') {
+          addDateGroup(today);
+        }
+
+        document.getElementById('singlePreviewContainer').innerHTML = '';
+        pendingConfirmType = null;
+        loadJobOrders();
+        updateBatchSummary();
+        showUndoButton();
+        return;
+      }
+
+      // Unified Warning Confirmation Handler
+      if (result.needsConfirmation) {
+        pendingConfirmType = result.confirmType;
+        const entriesTable = lastSubmitPayload ? buildConfirmEntriesTable(lastSubmitPayload) : '';
+        const html = entriesTable + '<div style="white-space:pre-line;">' + escapeHtml(result.message) + '</div>';
+        showConfirmModal(html).then(function (confirmed) {
+          if (confirmed) {
+            const flags = {};
+            if (pendingConfirmType === 'combined') {
+              flags.confirmWarnings = true;
+            }
+            clearStatus();
+            doSubmit(flags);
+          } else {
+            pendingConfirmType = null;
+            clearStatus();
+          }
+        });
+        return;
+      }
+
+      showStatus('error', escapeHtml(result.error) || 'An unexpected error occurred saving time rows.');
+    }
+
+    submitBtn.addEventListener('click', function () {
+      clearFieldErrors();
+      const clientError = validateClientSide();
+      if (clientError) {
+        showStatus('error', clientError);
+        return;
+      }
+      clearStatus();
+      doSubmit();
+    });
+
+    const clearBtn = document.getElementById('clearBtn');
+    clearBtn.addEventListener('click', function () {
+      clearFieldErrors();
+      clearStatus();
+      if (statusBox._autoDismissTimer) clearTimeout(statusBox._autoDismissTimer);
+
+      var todayStr = new Date().toISOString().slice(0, 10);
+      dateInput.value = todayStr;
+      var badge = document.getElementById('fridayBadge');
+      if (badge) badge.style.display = isFridayDate(todayStr) ? 'inline' : 'none';
+      startInput.value = '';
+      endInput.value = '';
+      jobOrderInput.value = '';
+      if (singleSelector) singleSelector.clear();
+
+      dateGroupsContainer.innerHTML = '';
+      dateGroupCount = 0;
+      if (currentMode === 'bulk') {
+        addDateGroup(new Date().toISOString().slice(0, 10));
+      }
+
+      document.getElementById('singlePreviewContainer').innerHTML = '';
+      updateBatchSummary();
+      pendingConfirmType = null;
+    });
+
+    // --- Undo ---
+    const undoBtn = document.getElementById('undoBtn');
+    undoBtn.addEventListener('click', function () {
+      undoBtn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (result) {
+          undoBtn.disabled = false;
+          undoBtn.style.display = 'none';
+          if (result.success) {
+            showStatus('success', result.message);
+          } else {
+            showStatus('error', result.error);
+          }
+        })
+        .withFailureHandler(function (err) {
+          undoBtn.disabled = false;
+          showStatus('error', err.message || String(err));
+        })
+        .undoLastSave();
+    });
+
+    function showUndoButton() {
+      undoBtn.style.display = '';
+      undoBtn.disabled = false;
+    }
+
+    // --- Templates ---
+    function loadTemplatesList() {
+      google.script.run
+        .withSuccessHandler(function (templates) {
+          var list = document.getElementById('templatesList');
+          if (!templates || templates.length === 0) {
+            list.innerHTML = '<div style="color:var(--muted);font-style:italic;">No saved templates yet.</div>';
+            return;
+          }
+          list.innerHTML = '';
+          templates.forEach(function (t) {
+            var item = document.createElement('div');
+            item.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;';
+            item.innerHTML = '<span style="font-weight:600;">' + escapeHtml(t.name) + '</span>' +
+              '<span style="color:var(--muted);font-size:11px;">' + t.startTime + '-' + t.endTime + (t.jobOrder ? ' ' + t.jobOrder : '') + '</span>' +
+              '<div>' +
+              '<button type="button" class="tpl-apply" data-id="' + t.id + '" style="background:var(--accent-tint);color:var(--accent-dark);border:none;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:600;cursor:pointer;margin-right:4px;">Apply</button>' +
+              '<button type="button" class="tpl-delete" data-id="' + t.id + '" style="background:none;color:var(--error);border:none;font-size:14px;cursor:pointer;">&times;</button>' +
+              '</div>';
+            list.appendChild(item);
+          });
+          list.querySelectorAll('.tpl-apply').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var id = this.getAttribute('data-id');
+              var tpl = templates.find(function (t) { return t.id === id; });
+              if (!tpl) return;
+              if (currentMode === 'single') {
+                startInput.value = tpl.startTime;
+                endInput.value = tpl.endTime;
+                jobOrderInput.value = tpl.jobOrder || '';
+                updateSinglePreview();
+              } else {
+                var activeShifts = document.querySelectorAll('.shift-row-card');
+                if (activeShifts.length > 0) {
+                  var lastShift = activeShifts[activeShifts.length - 1];
+                  var st = lastShift.querySelector('.shift-start');
+                  var et = lastShift.querySelector('.shift-end');
+                  var jo = lastShift.querySelector('.shift-job');
+                  if (st) st.value = tpl.startTime;
+                  if (et) et.value = tpl.endTime;
+                  if (jo) jo.value = tpl.jobOrder || '';
+                  updateAllPreviews();
+                  updateBatchSummary();
+                }
+              }
+              showStatus('success', 'Applied template "' + tpl.name + '".');
+            });
+          });
+          list.querySelectorAll('.tpl-delete').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var id = this.getAttribute('data-id');
+              google.script.run
+                .withSuccessHandler(function () { loadTemplatesList(); })
+                .deleteShiftTemplate(id);
+            });
+          });
+        })
+        .getShiftTemplates();
+    }
+
+    document.getElementById('toggleTemplatesBtn').addEventListener('click', function () {
+      var panel = document.getElementById('templatesPanel');
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      if (panel.style.display === 'block') loadTemplatesList();
+    });
+
+    document.getElementById('saveTemplateBtn').addEventListener('click', function () {
+      var name = document.getElementById('templateNameInput').value.trim();
+      if (!name) { showStatus('error', 'Enter a template name.'); return; }
+      var tStart = currentMode === 'single' ? startInput.value : (document.querySelector('.shift-start') ? document.querySelector('.shift-start').value : '');
+      var tEnd = currentMode === 'single' ? endInput.value : (document.querySelector('.shift-end') ? document.querySelector('.shift-end').value : '');
+      var tJob = currentMode === 'single' ? jobOrderInput.value : (document.querySelector('.shift-job') ? document.querySelector('.shift-job').value : '');
+      if (!tStart || !tEnd) { showStatus('error', 'Set start and end times before saving a template.'); return; }
+      google.script.run
+        .withSuccessHandler(function (result) {
+          if (result.success) {
+            document.getElementById('templateNameInput').value = '';
+            showStatus('success', result.message);
+            loadTemplatesList();
+          } else {
+            showStatus('error', result.error);
+          }
+        })
+        .saveShiftTemplate(name, tStart, tEnd, tJob);
+    });
+
+    // --- View Existing Entries ---
+    document.getElementById('viewExistingBtn').addEventListener('click', function () {
+      showWeeklyView(ACTIVE_SHEET_NAME);
+    });
+
+    // --- Dark Mode ---
+    initDarkMode();
+
+    window.addEventListener('load', function() {
+      loadEmployees();
+      initDarkMode();
+      google.script.run
+        .withSuccessHandler(function (configured) {
+          if (!configured) {
+            var banner = document.createElement('div');
+            banner.id = 'aiConfigBanner';
+            banner.style.cssText = 'background:#fffbeb;border:1px solid #f59e0b;color:#92400e;font-size:11px;padding:6px 10px;border-radius:6px;margin-bottom:10px;display:flex;align-items:center;gap:6px;';
+            banner.innerHTML = '⚠️ QuickFill features require Cloudflare credentials. <button type="button" style="margin-left:auto;background:var(--accent);color:white;border:none;border-radius:4px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;" onclick="google.script.run.askAndSetCloudflareCredentials()">Configure</button>';
+            var contentDiv = document.querySelector('.content');
+            if (contentDiv) contentDiv.insertBefore(banner, contentDiv.firstChild);
+          }
+        })
+        .checkAiCredentials();
+    });
+  </script>
+</body>
+</html>

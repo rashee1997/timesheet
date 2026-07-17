@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --accent: #d98a4f;
+      --accent-dark: #b56f39;
+      --accent-tint: #fbf0e6;
+      --confirm: #b08b52;
+      --bg: #f4f5f5;
+      --card: #ffffff;
+      --border: #e5e7eb;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --error: #dc2626;
+      --error-bg: #fef2f2;
+      --warn-bg: #fffbeb;
+      --warn-border: #f59e0b;
+      --success-bg: #ecfdf5;
+      --success: #059669;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      color: white;
+      padding: 16px 22px;
+    }
+    .header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+    .header p { margin: 4px 0 0; font-size: 12px; opacity: 0.9; }
+    .content { padding: 16px 22px 8px; }
+    .field { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    input[type="date"], input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    input[aria-invalid="true"] { border-color: var(--error); }
+    input.input-error { border-color: var(--error) !important; background-color: #fef2f2 !important; }
+    .row { display: flex; gap: 12px; }
+    .row .field { flex: 1; }
+    .helper-text { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+    .field-error { font-size: 11.5px; color: var(--error); margin-top: 6px; display: none; }
+
+    .chip-input-wrap { position: relative; }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent-tint);
+      color: var(--accent-dark);
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 5px 6px 5px 10px;
+      border-radius: 20px;
+    }
+    .chip button {
+      background: none;
+      border: none;
+      color: var(--accent-dark);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 2px;
+    }
+    .suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      margin-top: 4px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 10;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .suggestion-item {
+      padding: 9px 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .suggestion-item:hover { background: var(--accent-tint); }
+    .suggestion-item .s-name { font-weight: 600; }
+    .suggestion-item .s-email { color: var(--muted); font-size: 11.5px; margin-left: 6px; }
+    .suggestion-empty { padding: 9px 12px; font-size: 12.5px; color: var(--muted); }
+
+    button.action {
+      border: none;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-preview { background: #f1f1f0; color: var(--text); width: 100%; }
+    .btn-preview:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      margin-top: 10px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .preview-table th, .preview-table td {
+      padding: 7px 10px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+    }
+    .preview-table th:first-child, .preview-table td:first-child { text-align: left; }
+    .preview-table thead { background: var(--accent-tint); color: var(--accent-dark); }
+    .preview-table td.ot { font-weight: 700; color: var(--accent-dark); }
+
+    .status-box {
+      font-size: 12.5px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      margin-top: 10px;
+      display: none;
+    }
+    .status-box.error { display: block; background: var(--error-bg); color: var(--error); border: 1px solid #fecaca; }
+    .status-box.warn { display: block; background: var(--warn-bg); color: #92400e; border: 1px solid var(--warn-border); }
+    .status-box.success { display: block; background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; }
+    .confirm-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+    .footer {
+      position: sticky;
+      bottom: 0;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding: 14px 22px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 11px 18px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: white; flex: 1; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
+    .btn-secondary { background: #f1f1f0; color: var(--text); }
+    .btn-warn { background: var(--confirm); color: white; }
+    .spinner {
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 7px;
+      animation: spin 0.7s linear infinite;
+    }
+    .spinner.dark { border-color: rgba(181,111,57,0.3); border-top-color: var(--accent-dark); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="header" style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <h1>📧 Send Timesheet Report</h1>
+      <p>Defaults to last month's 25th through this month's 25th.</p>
+    </div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:rgba(255,255,255,0.8);cursor:pointer;">
+      <input type="checkbox" id="darkModeToggle" style="accent-color:white;"> Dark
+    </label>
+  </div>
+
+  <div class="content">
+    <form id="reportForm">
+      <div class="row">
+        <div class="field">
+          <label for="startDate">From</label>
+          <input type="date" id="startDate" required>
+        </div>
+        <div class="field">
+          <label for="endDate">To</label>
+          <input type="date" id="endDate" required>
+        </div>
+      </div>
+      <div class="field-error" id="dateError">Start date must be on or before the end date.</div>
+
+      <!-- Employee Filter Section -->
+      <div class="field" style="margin-top:6px;">
+        <label for="empSearchInput">Employees Filter (Optional)</label>
+        <div class="chips" id="empChips"></div>
+        <div class="chip-input-wrap">
+          <input type="text" id="empSearchInput" placeholder="Type to search employees..." autocomplete="off">
+          <div class="suggestions" id="empSuggestions"></div>
+        </div>
+        <div class="helper-text" id="empHelperText">Leave blank to include all employees in the report.</div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11.5px;color:var(--muted);">
+        <input type="checkbox" id="attachPdfCheck">
+        <label for="attachPdfCheck" style="display:inline;font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);cursor:pointer;">Attach report as Excel</label>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button type="button" class="action btn-preview" id="previewBtn" style="flex:1;">Preview Report</button>
+        <button type="button" id="companySettingsBtn" style="background:#f1f1f0;color:var(--text);border:none;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;">🏢</button>
+      </div>
+      <div id="previewArea"></div>
+
+      <div class="field" style="margin-top:18px;">
+        <label for="emailInput">Recipients</label>
+        <div class="chips" id="chips"></div>
+        <div class="chip-input-wrap">
+          <input type="text" id="emailInput" placeholder="Type a name or email…" autocomplete="off">
+          <div class="suggestions" id="suggestions"></div>
+        </div>
+        <div class="helper-text">Type to search your contacts, or type a full email and press Enter.</div>
+      <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" id="saveRecipientGroupBtn" style="background:none;border:1px dashed var(--accent);color:var(--accent-dark);border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:600;cursor:pointer;">💾 Save recipient group</button>
+        <button type="button" id="loadRecipientGroupBtn" style="background:none;border:1px dashed var(--accent);color:var(--accent-dark);border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:600;cursor:pointer;">📂 Load group</button>
+      </div>
+      </div>
+
+      <div class="status-box" id="statusBox"></div>
+    </form>
+  </div>
+
+  <div class="footer">
+    <button type="button" class="btn-secondary" id="clearBtn" style="flex: 0.4;">Clear</button>
+    <button type="button" class="btn-primary" id="sendBtn">Send Report</button>
+  </div>
+
+  <?!= HtmlService.createHtmlOutputFromFile('ConfirmModal').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('ProgressModal').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('CompanySettings').getContent(); ?>
+
+  <script>
+    <?!= HtmlService.createHtmlOutputFromFile('SharedUi').getContent(); ?>
+    <?!= HtmlService.createHtmlOutputFromFile('DarkMode').getContent(); ?>
+
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    const dateError = document.getElementById('dateError');
+    const previewBtn = document.getElementById('previewBtn');
+    const previewArea = document.getElementById('previewArea');
+
+    const emailInput = document.getElementById('emailInput');
+    const chipsEl = document.getElementById('chips');
+    const suggestionsEl = document.getElementById('suggestions');
+
+    const empSearchInput = document.getElementById('empSearchInput');
+    const empChipsEl = document.getElementById('empChips');
+    const empSuggestionsEl = document.getElementById('empSuggestions');
+    const empHelperText = document.getElementById('empHelperText');
+
+    const statusBox = document.getElementById('statusBox');
+    const sendBtn = document.getElementById('sendBtn');
+
+    let selectedEmails = [];
+    let allEmployeesList = [];
+    let employeesLoadFailed = false;
+    let selectedEmployees = [];
+    let pendingConfirmType = null;
+    let searchDebounce = null;
+
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    function showStatus(type, message) {
+      statusBox.className = 'status-box ' + type;
+      statusBox.innerHTML = message;
+      if (type === 'success') autoDismissSuccess(statusBox);
+    }
+    function clearStatus() {
+      statusBox.className = 'status-box';
+      statusBox.innerHTML = '';
+      if (statusBox._autoDismissTimer) clearTimeout(statusBox._autoDismissTimer);
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // --- Initial load: date range + employee list, both defensive ---
+    google.script.run
+      .withSuccessHandler(function (range) {
+        startDateInput.value = range.start;
+        endDateInput.value = range.end;
+      })
+      .withFailureHandler(function (err) {
+        showStatus('error', 'Could not load default date range: ' + (err.message || err) + '. Please pick dates manually.');
+      })
+      .getDefaultReportRange();
+
+    google.script.run
+      .withSuccessHandler(function (list) {
+        allEmployeesList = list || [];
+        if (allEmployeesList.length === 0) {
+          empHelperText.textContent = 'No employees detected yet - leave blank to include everyone found at send time.';
+        }
+      })
+      .withFailureHandler(function () {
+        employeesLoadFailed = true;
+        empHelperText.textContent = 'Could not load the employee list, but you can still send - it will include everyone by default.';
+      })
+      .getAllEmployees();
+
+    // --- Recipient Chips ---
+    function renderChips() {
+      chipsEl.innerHTML = '';
+      selectedEmails.forEach(function (email, i) {
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.innerHTML = '<span>' + escapeHtml(email) + '</span>';
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', function () {
+          selectedEmails.splice(i, 1);
+          renderChips();
+        });
+        chip.appendChild(removeBtn);
+        chipsEl.appendChild(chip);
+      });
+    }
+
+    function addEmail(email) {
+      const clean = String(email).trim();
+      if (!clean) return;
+      if (!EMAIL_RE.test(clean)) {
+        showStatus('error', '"' + escapeHtml(clean) + '" doesn\'t look like a valid email address.');
+        return;
+      }
+      if (selectedEmails.length >= 50) {
+        showStatus('error', 'Maximum 50 recipients per send.');
+        return;
+      }
+      if (selectedEmails.indexOf(clean) === -1) {
+        selectedEmails.push(clean);
+        renderChips();
+      }
+      emailInput.value = '';
+      suggestionsEl.style.display = 'none';
+      clearStatus();
+    }
+
+    function renderSuggestions(list) {
+      if (!list || list.length === 0) {
+        suggestionsEl.innerHTML = '<div class="suggestion-empty">No matches found.</div>';
+        suggestionsEl.style.display = 'block';
+        return;
+      }
+      suggestionsEl.innerHTML = '';
+      list.forEach(function (item) {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.innerHTML = '<span class="s-name">' + escapeHtml(item.name) + '</span><span class="s-email">' + escapeHtml(item.email) + '</span>';
+        div.addEventListener('click', function () { addEmail(item.email); });
+        suggestionsEl.appendChild(div);
+      });
+      suggestionsEl.style.display = 'block';
+    }
+
+    emailInput.addEventListener('input', function () {
+      const q = emailInput.value.trim();
+      clearTimeout(searchDebounce);
+      if (q.length < 1) {
+        suggestionsEl.style.display = 'none';
+        return;
+      }
+      searchDebounce = setTimeout(function () {
+        google.script.run
+          .withSuccessHandler(renderSuggestions)
+          .withFailureHandler(function () {
+            suggestionsEl.innerHTML = '<div class="suggestion-empty">Contact search unavailable right now.</div>';
+            suggestionsEl.style.display = 'block';
+          })
+          .searchContacts(q);
+      }, 250);
+    });
+
+    emailInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const val = emailInput.value.trim();
+        if (val) {
+          if (EMAIL_RE.test(val)) {
+            addEmail(val);
+          } else {
+            const firstSuggestion = suggestionsEl.querySelector('.suggestion-item');
+            if (firstSuggestion) firstSuggestion.click();
+          }
+        }
+      }
+    });
+
+    // --- Employee Filter Chips ---
+    function renderEmpChips() {
+      empChipsEl.innerHTML = '';
+      selectedEmployees.forEach(function (name, i) {
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.style.background = '#fef3c7';
+        chip.style.color = '#92400e';
+        chip.innerHTML = '<span>' + escapeHtml(name) + '</span>';
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = '×';
+        removeBtn.style.color = '#92400e';
+        removeBtn.addEventListener('click', function () {
+          selectedEmployees.splice(i, 1);
+          renderEmpChips();
+        });
+        chip.appendChild(removeBtn);
+        empChipsEl.appendChild(chip);
+      });
+    }
+
+    function addEmployee(name) {
+      const clean = String(name).trim();
+      if (!clean) return;
+      if (selectedEmployees.indexOf(clean) === -1) {
+        selectedEmployees.push(clean);
+        renderEmpChips();
+      }
+      empSearchInput.value = '';
+      empSuggestionsEl.style.display = 'none';
+    }
+
+    function renderEmpSuggestions(list) {
+      if (!list || list.length === 0) {
+        empSuggestionsEl.innerHTML = '<div class="suggestion-empty">No matches found.</div>';
+        empSuggestionsEl.style.display = 'block';
+        return;
+      }
+      empSuggestionsEl.innerHTML = '';
+      list.forEach(function (item) {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.innerHTML = '<span class="s-name">' + escapeHtml(item) + '</span>';
+        div.addEventListener('click', function () { addEmployee(item); });
+        empSuggestionsEl.appendChild(div);
+      });
+      empSuggestionsEl.style.display = 'block';
+    }
+
+    empSearchInput.addEventListener('input', function () {
+      const q = empSearchInput.value.trim().toLowerCase();
+      if (!q) {
+        empSuggestionsEl.style.display = 'none';
+        return;
+      }
+      const matches = allEmployeesList.filter(function (emp) {
+        return emp.toLowerCase().indexOf(q) !== -1 && selectedEmployees.indexOf(emp) === -1;
+      });
+      renderEmpSuggestions(matches);
+    });
+
+    empSearchInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const q = empSearchInput.value.trim().toLowerCase();
+        if (q) {
+          const match = allEmployeesList.find(function (emp) { return emp.toLowerCase() === q; });
+          if (match) {
+            addEmployee(match);
+          } else {
+            const firstSuggestion = empSuggestionsEl.querySelector('.suggestion-item');
+            if (firstSuggestion) firstSuggestion.click();
+          }
+        }
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#emailInput') && !e.target.closest('#suggestions')) {
+        suggestionsEl.style.display = 'none';
+      }
+      if (!e.target.closest('#empSearchInput') && !e.target.closest('#empSuggestions')) {
+        empSuggestionsEl.style.display = 'none';
+      }
+    });
+
+    // --- Date range live validation ---
+    function datesValid() {
+      if (!startDateInput.value || !endDateInput.value) return false;
+      const valid = startDateInput.value <= endDateInput.value;
+      dateError.style.display = valid ? 'none' : 'block';
+      startDateInput.setAttribute('aria-invalid', String(!valid));
+      endDateInput.setAttribute('aria-invalid', String(!valid));
+      return valid;
+    }
+    startDateInput.addEventListener('change', datesValid);
+    endDateInput.addEventListener('change', datesValid);
+
+    startDateInput.addEventListener('blur', debounce(function () {
+      if (!this.value) markError(this, 'Start date required.');
+      else clearFieldError(this);
+    }, 400));
+    endDateInput.addEventListener('blur', debounce(function () {
+      if (!this.value) markError(this, 'End date required.');
+      else clearFieldError(this);
+    }, 400));
+
+    // --- Preview ---
+    previewBtn.addEventListener('click', function () {
+      if (!startDateInput.value || !endDateInput.value) {
+        showStatus('error', 'Please select both dates.');
+        return;
+      }
+      if (!datesValid()) {
+        showStatus('error', 'Start date must be on or before the end date.');
+        return;
+      }
+      clearStatus();
+
+      previewBtn.disabled = true;
+      previewBtn.textContent = 'Loading…';
+      previewArea.innerHTML = '<div class="helper-text" style="margin-top:10px;">Building report…</div>';
+
+      google.script.run
+        .withSuccessHandler(function (result) {
+          previewBtn.disabled = false;
+          previewBtn.textContent = 'Preview Report';
+          if (!result.success) {
+            previewArea.innerHTML = '';
+            showStatus('error', escapeHtml(result.error));
+            return;
+          }
+          renderPreview(result.report);
+        })
+        .withFailureHandler(function (err) {
+          previewBtn.disabled = false;
+          previewBtn.textContent = 'Preview Report';
+          previewArea.innerHTML = '';
+          showStatus('error', escapeHtml(err.message || String(err)));
+        })
+        .previewOtReport(startDateInput.value, endDateInput.value, selectedEmployees);
+    });
+
+    function renderPreview(report) {
+      let html = '';
+
+      if (report.futureRangeNote) {
+        html += '<div class="field-error" style="display:block;color:#b45309;background:#fffbeb;border:1px solid #f59e0b;padding:8px 10px;border-radius:6px;margin-top:10px;">⏳ ' +
+          escapeHtml(report.futureRangeNote) + '</div>';
+      }
+      if (report.dataLagNote) {
+        html += '<div class="field-error" style="display:block;color:#0369a1;background:#f0f9ff;border:1px solid #7dd3fc;padding:8px 10px;border-radius:6px;margin-top:8px;">ℹ ' +
+          escapeHtml(report.dataLagNote) + '</div>';
+      }
+
+      if (report.rows.length === 0) {
+        html += '<div class="helper-text" style="margin-top:10px;">No entries found for ' + escapeHtml(report.startDate) + ' – ' + escapeHtml(report.endDate) + '.</div>';
+        previewArea.innerHTML = html;
+        return;
+      }
+
+      html += '<table class="preview-table"><thead><tr>' +
+        '<th>Employee</th><th>Normal</th><th>OT</th><th>Total</th><th>Days</th><th>Entry Range</th>' +
+        '</tr></thead><tbody>';
+      report.rows.forEach(function (r) {
+        const flag = r.partialCoverage ? ' <span title="Fewer days than the range covers - check for leave" style="color:#b45309;">⚑</span>' : '';
+        html += '<tr><td>' + escapeHtml(r.name) + flag + '</td><td>' + r.normalHours.toFixed(2) + '</td>' +
+          '<td class="ot">' + r.otHours.toFixed(2) + '</td><td>' + r.totalHours.toFixed(2) + '</td>' +
+          '<td>' + r.daysWorked + '</td>' +
+          '<td style="font-size:11px;color:var(--muted);">' + escapeHtml(r.firstEntry) + '–' + escapeHtml(r.lastEntry) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+
+      if (report.rows.some(function (r) { return r.partialCoverage; })) {
+        html += '<div class="helper-text" style="margin-top:6px;">⚑ = worked noticeably fewer days than this range covers - worth checking for leave before sending.</div>';
+      }
+      if (report.skippedSheets && report.skippedSheets.length > 0) {
+        html += '<div class="field-error" style="display:block;margin-top:6px;">⚠ ' + report.skippedSheets.length +
+          ' sheet(s) had errors and were excluded from this report.</div>';
+      }
+
+      previewArea.innerHTML = html;
+    }
+
+    // --- Send ---
+    function setSending(isSending) {
+      sendBtn.disabled = isSending;
+      sendBtn.innerHTML = isSending ? '<span class="spinner"></span>Sending…' : 'Send Report';
+    }
+
+    function buildPayload(confirmFlags) {
+      return Object.assign({
+        startDate: startDateInput.value,
+        endDate: endDateInput.value,
+        emails: selectedEmails,
+        selectedEmployees: selectedEmployees,
+        attachPdf: document.getElementById('attachPdfCheck') ? document.getElementById('attachPdfCheck').checked : false
+      }, confirmFlags || {});
+    }
+
+    function doSend(confirmFlags) {
+      setSending(true);
+      showProgressModal('Sending Timesheet Report');
+      google.script.run
+        .withSuccessHandler(function (result) {
+          setSending(false);
+          if (result.success) {
+            setProgressDone(result.message);
+            setTimeout(function () { hideProgressModal(); }, 2000);
+            showStatus('success', '✓ ' + escapeHtml(result.message));
+            return;
+          }
+          hideProgressModal();
+          if (result.needsConfirmation) {
+            pendingConfirmType = result.confirmType;
+            showConfirmModal('<div style="white-space:pre-line;">' + escapeHtml(result.message) + '</div>').then(function (confirmed) {
+              if (confirmed) {
+                var flags = {};
+                if (pendingConfirmType === 'noData') flags.confirmEmpty = true;
+                clearStatus();
+                doSend(flags);
+              } else {
+                pendingConfirmType = null;
+                clearStatus();
+              }
+            });
+            return;
+          }
+          showStatus('error', escapeHtml(result.error || 'Something went wrong.'));
+        })
+        .withFailureHandler(function (err) {
+          setSending(false);
+          hideProgressModal();
+          showStatus('error', escapeHtml(err.message || String(err)));
+        })
+        .sendOtReport(buildPayload(confirmFlags));
+    }
+
+    function clearFieldErrors() {
+      document.querySelectorAll('.field-error-inline').forEach(el => el.remove());
+      document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
+    }
+
+    function clearForm() {
+      clearFieldErrors();
+      clearStatus();
+
+      google.script.run
+        .withSuccessHandler(function (range) {
+          startDateInput.value = range.start;
+          endDateInput.value = range.end;
+        })
+        .withFailureHandler(function () {})
+        .getDefaultReportRange();
+
+      selectedEmployees = [];
+      renderEmpChips();
+      selectedEmails = [];
+      renderChips();
+      previewArea.innerHTML = '';
+      pendingConfirmType = null;
+    }
+
+    sendBtn.addEventListener('click', function () {
+      clearFieldErrors();
+      let hasError = false;
+      if (!startDateInput.value) {
+        markError(startDateInput, 'Start date is required.');
+        hasError = true;
+      }
+      if (!endDateInput.value) {
+        markError(endDateInput, 'End date is required.');
+        hasError = true;
+      }
+      if (!datesValid()) {
+        showStatus('error', 'Start date must be on or before the end date.');
+        hasError = true;
+      }
+      if (selectedEmails.length === 0) {
+        showStatus('error', 'Please add at least one recipient.');
+        hasError = true;
+      }
+      if (hasError) return;
+      clearStatus();
+      doSend();
+    });
+
+    const clearBtn = document.getElementById('clearBtn');
+    clearBtn.addEventListener('click', function () {
+      clearForm();
+    });
+
+    function clearFieldError(el) {
+      el.classList.remove('input-error');
+      var sibling = el.parentNode.querySelector('.field-error-inline');
+      if (sibling) sibling.remove();
+    }
+
+    function markError(el, msg) {
+      el.classList.add('input-error');
+      var existing = el.parentNode.querySelector('.field-error-inline');
+      if (existing) existing.remove();
+      var err = document.createElement('div');
+      err.className = 'field-error-inline';
+      err.style.cssText = 'font-size: 11px; color: var(--error); margin-top: 4px;';
+      err.textContent = msg;
+      el.parentNode.appendChild(err);
+    }
+
+    // --- Recipient Group Presets ---
+    var RECIPIENT_GROUPS_KEY = 'timesheet_recipient_groups';
+    function getRecipientGroups() {
+      try { return JSON.parse(localStorage.getItem(RECIPIENT_GROUPS_KEY)) || []; } catch (e) { return []; }
+    }
+    function saveRecipientGroups(groups) {
+      try { localStorage.setItem(RECIPIENT_GROUPS_KEY, JSON.stringify(groups)); } catch (e) {}
+    }
+
+    document.getElementById('saveRecipientGroupBtn').addEventListener('click', function () {
+      if (selectedEmails.length === 0) { showStatus('error', 'Add at least one recipient first.'); return; }
+      var name = prompt('Name this recipient group:');
+      if (!name) return;
+      var groups = getRecipientGroups();
+      groups.push({ name: name.trim(), emails: selectedEmails.slice() });
+      saveRecipientGroups(groups);
+      showStatus('success', 'Group "' + name.trim() + '" saved.');
+    });
+
+    document.getElementById('loadRecipientGroupBtn').addEventListener('click', function () {
+      var groups = getRecipientGroups();
+      if (groups.length === 0) { showStatus('error', 'No saved recipient groups.'); return; }
+      var html = '<div style="font-size:12.5px;">';
+      groups.forEach(function (g, i) {
+        html += '<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+          '<span style="font-weight:600;">' + escapeHtml(g.name) + '</span>' +
+          '<span style="color:var(--muted);font-size:11px;">' + g.emails.length + ' recipient(s)</span>' +
+          '<button type="button" class="loadGroupBtn" data-idx="' + i + '" style="background:var(--accent-tint);color:var(--accent-dark);border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:600;cursor:pointer;">Load</button>' +
+          '</div>';
+      });
+      html += '</div>';
+
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--card);border-radius:10px;max-width:360px;width:85%;padding:16px 18px;box-shadow:0 4px 20px rgba(0,0,0,0.15);';
+      box.innerHTML = '<div style="font-weight:600;font-size:13px;margin-bottom:10px;">Load Recipient Group</div>' + html +
+        '<button type="button" id="closeGroupModal" style="margin-top:10px;width:100%;background:#f1f1f0;color:var(--text);border:none;border-radius:6px;padding:7px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button>';
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      overlay.querySelectorAll('.loadGroupBtn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var idx = parseInt(this.getAttribute('data-idx'), 10);
+          var g = getRecipientGroups()[idx];
+          if (g) { selectedEmails = g.emails.slice(); renderChips(); showStatus('success', 'Loaded "' + g.name + '".'); }
+          overlay.remove();
+        });
+      });
+      document.getElementById('closeGroupModal').addEventListener('click', function () { overlay.remove(); });
+      overlay.addEventListener('click', function (e) { if (e.target === this) overlay.remove(); });
+    });
+
+    // --- Schedule Config ---
+    var scheduleConfigBtn = document.createElement('button');
+    scheduleConfigBtn.type = 'button';
+    scheduleConfigBtn.textContent = '⏰ Schedule auto-report';
+    scheduleConfigBtn.style.cssText = 'background:none;border:1px dashed var(--accent);color:var(--accent-dark);border-radius:6px;padding:4px 10px;font-size:10.5px;font-weight:600;cursor:pointer;margin-top:6px;width:100%;';
+    document.querySelector('.field:last-of-type') ? document.querySelector('.field:last-of-type').appendChild(scheduleConfigBtn) : null;
+
+    scheduleConfigBtn.addEventListener('click', function () {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--card);border-radius:10px;max-width:360px;width:85%;padding:18px 20px;box-shadow:0 4px 20px rgba(0,0,0,0.15);';
+      google.script.run
+        .withSuccessHandler(function (config) {
+          var enabled = config && config.enabled;
+          var day = config ? config.dayOfMonth : 25;
+          var hour = config ? config.hour : 8;
+          box.innerHTML =
+            '<div style="font-weight:600;font-size:13px;margin-bottom:12px;">⏰ Scheduled Auto-Report</div>' +
+            '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Auto-send the OT report every month to the current recipient list.</div>' +
+            (enabled ? '<div style="font-size:11px;color:var(--success);margin-bottom:10px;">✅ Active — sends on day ' + day + ' at ' + hour + ':00</div>' : '') +
+            '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
+            '<label style="flex:1;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;">Day<input type="number" id="schedDay" value="' + day + '" min="1" max="28" style="width:100%;margin-top:4px;padding:6px;border:1.5px solid var(--border);border-radius:4px;font-size:13px;"></label>' +
+            '<label style="flex:1;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;">Hour (24h)<input type="number" id="schedHour" value="' + hour + '" min="0" max="23" style="width:100%;margin-top:4px;padding:6px;border:1.5px solid var(--border);border-radius:4px;font-size:13px;"></label>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;">' +
+            '<button type="button" id="enableSchedBtn" style="flex:1;background:var(--accent);color:white;border:none;border-radius:6px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;">' + (enabled ? 'Update' : 'Enable') + '</button>' +
+            (enabled ? '<button type="button" id="disableSchedBtn" style="flex:0.5;background:#f1f1f0;color:var(--text);border:none;border-radius:6px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;">Disable</button>' : '') +
+            '</div>' +
+            '<button type="button" id="closeSchedModal" style="margin-top:8px;width:100%;background:none;color:var(--muted);border:none;padding:6px;font-size:11px;cursor:pointer;">Close</button>';
+          overlay.appendChild(box);
+          document.body.appendChild(overlay);
+
+          document.getElementById('enableSchedBtn').addEventListener('click', function () {
+            var cfg = { emails: selectedEmails.slice(), dayOfMonth: parseInt(document.getElementById('schedDay').value, 10), hour: parseInt(document.getElementById('schedHour').value, 10), selectedEmployees: selectedEmployees.slice() };
+            google.script.run
+              .withSuccessHandler(function (r) { showStatus(r.success ? 'success' : 'error', r.message || r.error); overlay.remove(); })
+              .setScheduledReportConfig(cfg);
+          });
+          if (document.getElementById('disableSchedBtn')) {
+            document.getElementById('disableSchedBtn').addEventListener('click', function () {
+              google.script.run
+                .withSuccessHandler(function (r) { showStatus(r.success ? 'success' : 'error', r.message || r.error); overlay.remove(); })
+                .disableScheduledReport();
+            });
+          }
+          document.getElementById('closeSchedModal').addEventListener('click', function () { overlay.remove(); });
+          overlay.addEventListener('click', function (e) { if (e.target === this) overlay.remove(); });
+        })
+        .getScheduledReportConfig();
+    });
+
+    // --- Company Settings ---
+    document.getElementById('companySettingsBtn').addEventListener('click', function () {
+      openCompanySettings();
+    });
+
+    // --- Dark Mode ---
+    initDarkMode();
+  </script>
+</body>
+</html>

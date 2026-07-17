@@ -1,0 +1,43 @@
+<div id="weeklyViewOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9998;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;max-width:520px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.2);padding:20px 22px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <strong style="font-size:14px;color:var(--text);">📅 Existing Entries</strong>
+      <button type="button" id="weeklyViewClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1;">&times;</button>
+    </div>
+    <div id="weeklyViewContent" style="font-size:12px;color:var(--muted);">Loading…</div>
+  </div>
+</div>
+<script>
+document.getElementById('weeklyViewClose').addEventListener('click', function () {
+  document.getElementById('weeklyViewOverlay').style.display = 'none';
+});
+document.getElementById('weeklyViewOverlay').addEventListener('click', function (e) {
+  if (e.target === this) this.style.display = 'none';
+});
+
+function showWeeklyView(sheetName) {
+  document.getElementById('weeklyViewOverlay').style.display = 'flex';
+  document.getElementById('weeklyViewContent').innerHTML = 'Loading entries…';
+  google.script.run
+    .withSuccessHandler(function (data) {
+      if (!data || data.length === 0) {
+        document.getElementById('weeklyViewContent').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">No entries found for the current month.</div>';
+        return;
+      }
+      var html = '';
+      data.forEach(function (row) {
+        html += '<div style="border-bottom:1px solid var(--border);padding:8px 0;display:flex;justify-content:space-between;align-items:center;">' +
+          '<span style="font-weight:600;">' + row.date + '</span>' +
+          '<span>' + row.name + '</span>' +
+          '<span>' + row.start + '-' + row.end + '</span>' +
+          '<span style="color:var(--accent-dark);">' + row.job + '</span>' +
+          '</div>';
+      });
+      document.getElementById('weeklyViewContent').innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Showing the latest entries on the active sheet.</div>' + html;
+    })
+    .withFailureHandler(function () {
+      document.getElementById('weeklyViewContent').innerHTML = '<div style="text-align:center;padding:20px;color:var(--error);">Could not load entries.</div>';
+    })
+    .getRecentEntriesPreview(sheetName);
+}
+</script>

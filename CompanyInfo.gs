@@ -16,7 +16,8 @@ function saveCompanyInfo(formData) {
 
   if (formData.logo && typeof formData.logo === 'object' && formData.logo.bytes) {
     try {
-      var blob = Utilities.newBlob(formData.logo.bytes, formData.logo.mimeType || 'image/png', 'logo');
+      var decodedBytes = Utilities.base64Decode(formData.logo.bytes);
+      var blob = Utilities.newBlob(decodedBytes, formData.logo.mimeType || 'image/png', 'logo');
       var file = DriveApp.createFile(blob);
       var oldId = props.getProperty(COMPANY_LOGO_PROP);
       if (oldId) {

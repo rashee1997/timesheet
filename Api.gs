@@ -36,7 +36,20 @@ var API_ACTIONS = {
   parseNaturalLanguageEntriesWithImage: function (p) {
     return parseNaturalLanguageEntriesWithImage(p.text, p.imageBase64, p.mimeType, p.sheetName);
   },
-  getRecentEntriesPreview: function (p) { return getRecentEntriesPreview(p.sheetName); }
+  getRecentEntriesPreview: function (p) { return getRecentEntriesPreview(p.sheetName); },
+
+  // ---- Phase 2: OT reports, scheduling, company settings ----
+  getDefaultReportRange: function () { return getDefaultReportRange(); },
+  getAllEmployees: function () { return getAllEmployees(); },
+  searchContacts: function (p) { return searchContacts(p.query); },
+  previewOtReport: function (p) { return previewOtReport(p.startDate, p.endDate, p.selectedEmployees); },
+  sendOtReport: function (p) { return sendOtReport(p); },
+  getScheduledReportConfig: function () { return getScheduledReportConfig(); },
+  setScheduledReportConfig: function (p) { return setScheduledReportConfig(p.config); },
+  disableScheduledReport: function () { return disableScheduledReport(); },
+  getCompanyInfo: function () { return getCompanyInfo(); },
+  saveCompanyInfo: function (p) { return saveCompanyInfo(p.formData); },
+  removeCompanyLogo: function () { return removeCompanyLogo(); }
 };
 
 function doPost(e) {

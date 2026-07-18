@@ -1,3 +1,18 @@
+function setColumnWidthsToFitContent(sheet, numCols, headers, data) {
+  var PX_PER_CHAR = 7;
+  var PADDING_PX = 24;
+  var MIN_WIDTH = 60;
+  for (var c = 0; c < numCols; c++) {
+    var maxLen = String(headers[c]).length;
+    for (var r = 0; r < data.length; r++) {
+      var v = data[r][c];
+      var len = (v === null || v === undefined) ? 0 : String(v).length;
+      if (len > maxLen) maxLen = len;
+    }
+    sheet.setColumnWidth(c + 1, Math.max(MIN_WIDTH, maxLen * PX_PER_CHAR + PADDING_PX));
+  }
+}
+
 function buildReportExcel(report) {
   var info = getCompanyInfo();
   var COLS = 6;
@@ -17,8 +32,9 @@ function buildReportExcel(report) {
   headerRange.setBackground('#fbf0e6').setFontWeight('bold').setFontSize(9)
     .setHorizontalAlignment('center');
 
+  var data = [];
   if (report.rows.length > 0) {
-    var data = report.rows.map(function (r) {
+    data = report.rows.map(function (r) {
       return [sanitizeSheetText(r.name), r.normalHours, r.otHours, r.totalHours, r.daysWorked, r.firstEntry + ' - ' + r.lastEntry];
     });
     var dataRange = sheet.getRange(headerRow + 1, 1, data.length, COLS).setValues(data);
@@ -37,7 +53,9 @@ function buildReportExcel(report) {
   }
 
   sheet.setFrozenRows(headerRow);
-  sheet.autoResizeColumns(1, COLS);
+  // autoResizeColumns' resize doesn't reliably land before an immediate xlsx
+  // export fetch below, even after flush() - so compute widths explicitly.
+  setColumnWidthsToFitContent(sheet, COLS, headers, data);
   SpreadsheetApp.flush();
 
   var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx';

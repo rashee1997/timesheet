@@ -49,7 +49,10 @@ var API_ACTIONS = {
   disableScheduledReport: function () { return disableScheduledReport(); },
   getCompanyInfo: function () { return getCompanyInfo(); },
   saveCompanyInfo: function (p) { return saveCompanyInfo(p.formData); },
-  removeCompanyLogo: function () { return removeCompanyLogo(); }
+  removeCompanyLogo: function () { return removeCompanyLogo(); },
+
+  // ---- Phase 3: timesheets list (filters + fuzzy search) ----
+  listTimesheetEntries: function (p) { return listTimesheetEntries(p); }
 };
 
 function doPost(e) {

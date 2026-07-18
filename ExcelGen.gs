@@ -194,6 +194,7 @@ function buildEmployeeTab_(sheet, row, empEntries, report) {
     return [dateLabel, dayLabel, e.startTime, e.endTime, sanitizeSheetText(e.jobOrder), e.normalHours, e.otHours, e.totalHours];
   });
   sheet.getRange(headerRow + 1, 1, data.length, COLS).setValues(data).setFontSize(9);
+  sheet.getRange(headerRow + 1, 1, data.length, 5).setHorizontalAlignment('center');
   sheet.getRange(headerRow + 1, 6, data.length, 3).setNumberFormat('0.00').setHorizontalAlignment('right');
 
   var totalsRow = headerRow + 1 + data.length;

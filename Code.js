@@ -321,15 +321,17 @@ function coreProcessEntries(sheet, rawEntries, flags) {
     }
     seenKeys[dupKey] = true;
 
-    // Soft warnings
+    // Soft warnings — always include the time preview (start → end, total hrs)
+    // so the confirmation reads like the sheet row it's about to write.
+    var timePreview = raw.startTime + ' → ' + raw.endTime + ' (' + totalHrs.toFixed(1) + ' hrs)';
     if (detected && (detected.monthIndex !== date.getMonth() || detected.year !== date.getFullYear())) {
-      warnMonth.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date));
+      warnMonth.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview);
     }
     if (totalHrs > CONFIG.MAX_REASONABLE_HOURS) {
-      warnLong.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + totalHrs.toFixed(1) + ' hrs');
+      warnLong.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview);
     }
     if (overnight) {
-      warnOvernight.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + raw.startTime + ' → ' + raw.endTime + ' (next day)');
+      warnOvernight.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview + ', next day');
     }
 
     // Overwrite check across the WHOLE 6-column block (in memory)
@@ -340,7 +342,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
       if (v !== '' && v !== null && v !== undefined) { hasExisting = true; break; }
     }
     if (hasExisting) {
-      warnOverwrite.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date));
+      warnOverwrite.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview);
     }
 
     let jobOrder = raw.jobOrder ? String(raw.jobOrder).trim() : '';

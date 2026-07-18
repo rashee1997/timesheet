@@ -1,3 +1,5 @@
+<img src="icon.svg" width="64" height="64" alt="Timesheet logo">
+
 # Timesheet — Apps Script Backend
 
 Google Apps Script project (bound to a Google Sheet) that handles timesheet entry,

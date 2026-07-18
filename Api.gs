@@ -52,7 +52,10 @@ var API_ACTIONS = {
   removeCompanyLogo: function () { return removeCompanyLogo(); },
 
   // ---- Phase 3: timesheets list (filters + fuzzy search) ----
-  listTimesheetEntries: function (p) { return listTimesheetEntries(p); }
+  listTimesheetEntries: function (p) { return listTimesheetEntries(p); },
+
+  // ---- Phase 4: dashboard ----
+  getRecentAuditEntries: function (p) { return getRecentAuditEntries(p && p.limit); }
 };
 
 function doPost(e) {

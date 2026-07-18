@@ -6,33 +6,20 @@
  */
 
 /**
- * @param {Object} filters
- * @param {string} filters.startDate  yyyy-MM-dd (required)
- * @param {string} filters.endDate    yyyy-MM-dd (required)
- * @param {string[]} [filters.employees]  exact known names to include
- * @param {string} [filters.jobOrder]     exact job order to match (case-insensitive)
- * @param {number} [filters.minHours]
- * @param {number} [filters.maxHours]
- * @param {boolean} [filters.otOnly]
- * @param {string} [filters.search]       fuzzy match against employee name or job order
- * @param {number} [filters.page]         1-indexed, default 1
- * @param {number} [filters.pageSize]     default 25, capped at 100
+ * Raw per-shift rows for every employee across all timesheet sheets touching
+ * [startDate, endDate], unfiltered and unpaginated. Shared by
+ * listTimesheetEntries (which filters/sorts/paginates on top of this) and
+ * buildReportExcel (which groups rows by employee for per-employee tabs).
+ *
+ * @param {string} startDateStr yyyy-MM-dd
+ * @param {string} endDateStr   yyyy-MM-dd
+ * @returns {{entries: Array, skippedSheets: string[]}}
  */
-function listTimesheetEntries(filters) {
-  filters = filters || {};
-  if (!filters.startDate || !filters.endDate) {
-    return { success: false, error: 'Both a start date and end date are required.' };
-  }
-
-  var startDate, endDate;
-  try {
-    startDate = parseIsoDate(filters.startDate);
-    endDate = parseIsoDate(filters.endDate);
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
+function collectTimesheetEntries(startDateStr, endDateStr) {
+  var startDate = parseIsoDate(startDateStr);
+  var endDate = parseIsoDate(endDateStr);
   if (startDate.getTime() > endDate.getTime()) {
-    return { success: false, error: 'Start date must be on or before the end date.' };
+    throw new Error('Start date must be on or before the end date.');
   }
 
   var tz = Session.getScriptTimeZone();
@@ -40,22 +27,6 @@ function listTimesheetEntries(filters) {
   var endStr = Utilities.formatDate(endDate, tz, 'yyyy-MM-dd');
   var startKey = startDate.getFullYear() * 12 + startDate.getMonth();
   var endKey = endDate.getFullYear() * 12 + endDate.getMonth();
-
-  var selectedKeys = null;
-  if (filters.employees && filters.employees.length > 0) {
-    selectedKeys = {};
-    filters.employees.forEach(function (name) {
-      if (name) selectedKeys[normalizeNameKey(name)] = true;
-    });
-  }
-  var jobOrderFilter = filters.jobOrder ? String(filters.jobOrder).trim().toLowerCase() : '';
-  var minHours = typeof filters.minHours === 'number' ? filters.minHours : null;
-  var maxHours = typeof filters.maxHours === 'number' ? filters.maxHours : null;
-  var otOnly = !!filters.otOnly;
-  var search = filters.search ? String(filters.search).trim() : '';
-
-  var page = Math.max(1, parseInt(filters.page, 10) || 1);
-  var pageSize = Math.min(100, Math.max(1, parseInt(filters.pageSize, 10) || 25));
 
   var entries = [];
   var skippedSheets = [];
@@ -132,12 +103,57 @@ function listTimesheetEntries(filters) {
         });
       });
     } catch (sheetErr) {
-      Logger.log('listTimesheetEntries: skipped sheet "' + sheetName + '" due to error: ' + sheetErr);
+      Logger.log('collectTimesheetEntries: skipped sheet "' + sheetName + '" due to error: ' + sheetErr);
       skippedSheets.push(sheetName);
     }
   });
 
-  var filtered = entries.filter(function (e) {
+  return { entries: entries, skippedSheets: skippedSheets };
+}
+
+/**
+ * @param {Object} filters
+ * @param {string} filters.startDate  yyyy-MM-dd (required)
+ * @param {string} filters.endDate    yyyy-MM-dd (required)
+ * @param {string[]} [filters.employees]  exact known names to include
+ * @param {string} [filters.jobOrder]     exact job order to match (case-insensitive)
+ * @param {number} [filters.minHours]
+ * @param {number} [filters.maxHours]
+ * @param {boolean} [filters.otOnly]
+ * @param {string} [filters.search]       fuzzy match against employee name or job order
+ * @param {number} [filters.page]         1-indexed, default 1
+ * @param {number} [filters.pageSize]     default 25, capped at 100
+ */
+function listTimesheetEntries(filters) {
+  filters = filters || {};
+  if (!filters.startDate || !filters.endDate) {
+    return { success: false, error: 'Both a start date and end date are required.' };
+  }
+
+  var scan;
+  try {
+    scan = collectTimesheetEntries(filters.startDate, filters.endDate);
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+
+  var selectedKeys = null;
+  if (filters.employees && filters.employees.length > 0) {
+    selectedKeys = {};
+    filters.employees.forEach(function (name) {
+      if (name) selectedKeys[normalizeNameKey(name)] = true;
+    });
+  }
+  var jobOrderFilter = filters.jobOrder ? String(filters.jobOrder).trim().toLowerCase() : '';
+  var minHours = typeof filters.minHours === 'number' ? filters.minHours : null;
+  var maxHours = typeof filters.maxHours === 'number' ? filters.maxHours : null;
+  var otOnly = !!filters.otOnly;
+  var search = filters.search ? String(filters.search).trim() : '';
+
+  var page = Math.max(1, parseInt(filters.page, 10) || 1);
+  var pageSize = Math.min(100, Math.max(1, parseInt(filters.pageSize, 10) || 25));
+
+  var filtered = scan.entries.filter(function (e) {
     if (selectedKeys && !selectedKeys[e.employeeKey]) return false;
     if (jobOrderFilter && e.jobOrder.toLowerCase() !== jobOrderFilter) return false;
     if (minHours !== null && e.totalHours < minHours) return false;
@@ -176,7 +192,7 @@ function listTimesheetEntries(filters) {
     page: page,
     pageSize: pageSize,
     totalPages: totalPages,
-    skippedSheets: skippedSheets
+    skippedSheets: scan.skippedSheets
   };
 }
 

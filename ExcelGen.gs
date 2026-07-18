@@ -14,6 +14,13 @@ function setColumnWidthsToFitContent(sheet, numCols, headers, data, startCol) {
   }
 }
 
+/** formatDDMMYYYY (shared with the email body/UI) produces 'dd/MM/yyyy';
+ * Excel output uses dashes instead, so this just swaps the separator rather
+ * than reparsing the date. */
+function toExcelDate_(ddmmyyyySlash) {
+  return String(ddmmyyyySlash).replace(/\//g, '-');
+}
+
 /** Applies the report's standard header-row + border styling. Used by every
  * tab so Summary and per-employee tables never visually drift apart. */
 function styleReportTable(sheet, headerRow, numCols, dataRowCount, startCol) {
@@ -80,7 +87,7 @@ function buildSummaryTab_(sheet, info, report) {
     .setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
   sheet.getRange(2, 1, 1, COLS).merge().setValue('Timesheet OT Report')
     .setFontSize(12).setFontWeight('bold').setHorizontalAlignment('center');
-  sheet.getRange(3, 1, 1, COLS).merge().setValue(report.startDate + ' to ' + report.endDate)
+  sheet.getRange(3, 1, 1, COLS).merge().setValue(toExcelDate_(report.startDate) + ' to ' + toExcelDate_(report.endDate))
     .setFontSize(9).setFontColor('#6b7280').setHorizontalAlignment('center');
 
   var statLine = 'Total Hours: ' + totalHours.toFixed(2) +
@@ -95,7 +102,7 @@ function buildSummaryTab_(sheet, info, report) {
   sheet.getRange(headerRow, 1, 1, COLS).setValues([headers]);
 
   var data = report.rows.map(function (r) {
-    return [sanitizeSheetText(r.name), r.normalHours, r.otHours, r.totalHours, r.daysWorked, r.firstEntry + ' - ' + r.lastEntry];
+    return [sanitizeSheetText(r.name), r.normalHours, r.otHours, r.totalHours, r.daysWorked, toExcelDate_(r.firstEntry) + ' - ' + toExcelDate_(r.lastEntry)];
   });
   if (data.length > 0) {
     sheet.getRange(headerRow + 1, 1, data.length, COLS).setValues(data).setFontSize(9);
@@ -157,7 +164,7 @@ function buildEmployeeTab_(sheet, row, empEntries, report) {
 
   sheet.getRange(1, 1, 1, COLS).merge().setValue(row.name)
     .setFontSize(14).setFontWeight('bold').setHorizontalAlignment('center');
-  sheet.getRange(2, 1, 1, COLS).merge().setValue(report.startDate + ' to ' + report.endDate)
+  sheet.getRange(2, 1, 1, COLS).merge().setValue(toExcelDate_(report.startDate) + ' to ' + toExcelDate_(report.endDate))
     .setFontSize(9).setFontColor('#6b7280').setHorizontalAlignment('center');
 
   var headerRow = 4;
@@ -179,8 +186,10 @@ function buildEmployeeTab_(sheet, row, empEntries, report) {
   }
 
   var data = sorted.map(function (e) {
-    var dayLabel = Utilities.formatDate(parseIsoDate(e.date), tz, 'EEE');
-    return [e.date, dayLabel, e.startTime, e.endTime, sanitizeSheetText(e.jobOrder), e.normalHours, e.otHours, e.totalHours];
+    var d = parseIsoDate(e.date);
+    var dateLabel = Utilities.formatDate(d, tz, 'dd-MM-yyyy');
+    var dayLabel = Utilities.formatDate(d, tz, 'EEE');
+    return [dateLabel, dayLabel, e.startTime, e.endTime, sanitizeSheetText(e.jobOrder), e.normalHours, e.otHours, e.totalHours];
   });
   sheet.getRange(headerRow + 1, 1, data.length, COLS).setValues(data).setFontSize(9);
   sheet.getRange(headerRow + 1, 6, data.length, 3).setNumberFormat('0.00').setHorizontalAlignment('right');

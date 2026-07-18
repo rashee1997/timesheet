@@ -132,6 +132,8 @@ function buildSummaryTab_(sheet, info, report) {
     styleReportTable(sheet, headerRow, 2, pieData.length, 8);
     setColumnWidthsToFitContent(sheet, 2, pieHeaders, pieData, 8);
 
+    // Both charts anchor to the right of the table (column 11) instead of
+    // below it, stacked vertically so they don't need the table's row count.
     var barChart = sheet.newChart()
       .setChartType(Charts.ChartType.COLUMN)
       .addRange(sheet.getRange(headerRow, 1, data.length + 1, 3))
@@ -141,7 +143,7 @@ function buildSummaryTab_(sheet, info, report) {
       .setOption('legend', { position: 'top' })
       .setOption('width', 640)
       .setOption('height', 320)
-      .setPosition(lastRow + 3, 1, 0, 0)
+      .setPosition(headerRow, 11, 0, 0)
       .build();
     sheet.insertChart(barChart);
 
@@ -152,7 +154,7 @@ function buildSummaryTab_(sheet, info, report) {
       .setOption('title', 'OT share of total hours')
       .setOption('width', 360)
       .setOption('height', 320)
-      .setPosition(lastRow + 3, 8, 0, 0)
+      .setPosition(headerRow + 17, 11, 0, 0)
       .build();
     sheet.insertChart(pieChart);
   }

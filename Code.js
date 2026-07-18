@@ -577,6 +577,25 @@ function sanitizeSheetText(v) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
+/**
+ * Makes an employee name safe as an Excel/Sheets tab name (Excel's 31-char
+ * cap is the binding constraint) and de-dupes against names already used in
+ * the same workbook by appending " (2)", " (3)", etc.
+ */
+function sanitizeSheetName(name, usedNames) {
+  var s = String(name || '').replace(/[\[\]*?/\\:]/g, ' ').trim();
+  if (s.length > 31) s = s.substring(0, 31).trim();
+  if (!s) s = 'Employee';
+  var base = s, n = 2;
+  while (usedNames[s]) {
+    var suffix = ' (' + n + ')';
+    s = base.substring(0, 31 - suffix.length) + suffix;
+    n++;
+  }
+  usedNames[s] = true;
+  return s;
+}
+
 function getColumnLetter(col) {
   var letter = '';
   while (col > 0) {

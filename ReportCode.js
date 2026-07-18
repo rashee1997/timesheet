@@ -278,10 +278,19 @@ function generateOtReport(startDateStr, endDateStr, selectedEmployees) {
     ) + 1;
   }
 
+  // Partial-coverage flag: proportional to the period length rather than a flat
+  // day-count cushion, so it doesn't over-flag long ranges (a few normal leave
+  // days across 6 months tripped the old flat "-10" cushion) or fire on ranges
+  // too short/just-started to carry any real signal.
+  const MIN_EVALUABLE_DAYS = 10;        // shorter/less-elapsed than this: not enough signal, never flag
+  const ABSENCE_TOLERANCE_RATIO = 0.30; // tolerate up to ~30% of the period as normal days off
+  const MIN_ABSOLUTE_GAP_DAYS = 5;      // even if the ratio math says "flag", require a real gap this big
+
   const rows = Object.keys(totals)
     .sort(function (a, b) { return totals[a].displayName.localeCompare(totals[b].displayName); })
     .map(function (key) {
       const t = totals[key];
+      const gap = expectedCalendarDays - t.days;
       return {
         name: t.displayName,
         normalHours: round2(t.normal),
@@ -290,7 +299,9 @@ function generateOtReport(startDateStr, endDateStr, selectedEmployees) {
         daysWorked: t.days,
         firstEntry: formatDDMMYYYY(t.firstDate),
         lastEntry: formatDDMMYYYY(t.lastDate),
-        partialCoverage: expectedCalendarDays > 0 && t.days < expectedCalendarDays - 10
+        partialCoverage: expectedCalendarDays >= MIN_EVALUABLE_DAYS &&
+          gap >= MIN_ABSOLUTE_GAP_DAYS &&
+          t.days < expectedCalendarDays * (1 - ABSENCE_TOLERANCE_RATIO)
       };
     });
 

@@ -464,6 +464,12 @@ function writeFormulaRow(sheet, targetRow, col, start, end, jobOrder) {
   sheet.getRange(targetRow, col, 1, 2).setNumberFormat('h:mm AM/PM');
   sheet.getRange(targetRow, col + 2, 1, 3).setNumberFormat('[h]:mm');
   sheet.getRange(targetRow, col + 5, 1, 1).setNumberFormat('@');
+  // Force consistent alignment every save so a stray manual edit can't leave
+  // the row visually misaligned: time/hours columns centered both ways,
+  // job order left-aligned horizontally (it's text, reads better left) but
+  // still vertically centered like the rest of the row.
+  sheet.getRange(targetRow, col, 1, 5).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  sheet.getRange(targetRow, col + 5, 1, 1).setHorizontalAlignment('left').setVerticalAlignment('middle');
 }
 
 /**

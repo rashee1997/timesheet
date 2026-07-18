@@ -101,8 +101,11 @@ function buildSummaryTab_(sheet, info, report) {
   var headers = ['Employee', 'Normal Hrs', 'OT Hrs', 'Total Hrs', 'Days', 'Entry Range'];
   sheet.getRange(headerRow, 1, 1, COLS).setValues([headers]);
 
+  // Employee names get a ⚑ suffix when partialCoverage is flagged (fewer
+  // days than the range covers - matches the ⚑ used in the email/dialog).
   var data = report.rows.map(function (r) {
-    return [sanitizeSheetText(r.name), r.normalHours, r.otHours, r.totalHours, r.daysWorked, toExcelDate_(r.firstEntry) + ' - ' + toExcelDate_(r.lastEntry)];
+    var name = sanitizeSheetText(r.name) + (r.partialCoverage ? ' ⚑' : '');
+    return [name, r.normalHours, r.otHours, r.totalHours, r.daysWorked, toExcelDate_(r.firstEntry) + ' - ' + toExcelDate_(r.lastEntry)];
   });
   if (data.length > 0) {
     sheet.getRange(headerRow + 1, 1, data.length, COLS).setValues(data).setFontSize(9);
@@ -116,10 +119,20 @@ function buildSummaryTab_(sheet, info, report) {
       return ['=B' + r + '+C' + r];
     });
     sheet.getRange(summaryFirstRow, 4, data.length, 1).setFormulas(totalHrsFormulas);
+
+    report.rows.forEach(function (r, i) {
+      if (r.partialCoverage) sheet.getRange(summaryFirstRow + i, 1).setFontColor('#b45309');
+    });
   }
   styleReportTable(sheet, headerRow, COLS, data.length, 1);
 
   var lastRow = headerRow + data.length;
+  if (report.rows.some(function (r) { return r.partialCoverage; })) {
+    lastRow += 1;
+    sheet.getRange(lastRow, 1, 1, COLS).merge()
+      .setValue('⚑ Partial coverage - fewer days than the range covers, check for leave.')
+      .setFontSize(8).setFontColor('#b45309');
+  }
   if (report.skippedSheets && report.skippedSheets.length > 0) {
     lastRow += 1;
     sheet.getRange(lastRow, 1, 1, COLS).merge()
@@ -184,6 +197,12 @@ function buildEmployeeTab_(sheet, row, empEntries, report) {
     .setFontSize(14).setFontWeight('bold').setHorizontalAlignment('center');
   sheet.getRange(2, 1, 1, COLS).merge().setValue(toExcelDate_(report.startDate) + ' to ' + toExcelDate_(report.endDate))
     .setFontSize(9).setFontColor('#6b7280').setHorizontalAlignment('center');
+
+  if (row.partialCoverage) {
+    sheet.getRange(3, 1, 1, COLS).merge()
+      .setValue('⚑ Partial coverage - fewer days than the range covers, check for leave.')
+      .setFontSize(9).setFontColor('#b45309').setHorizontalAlignment('center');
+  }
 
   var headerRow = 4;
   var headers = ['Date', 'Day', 'Start', 'End', 'Job Order', 'Normal', 'OT', 'Total'];

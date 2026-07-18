@@ -1,11 +1,15 @@
 var COMPANY_PROP_NAME = 'companyName';
-var COMPANY_LOGO_PROP = 'companyLogoFileId';
+// Stores an absolute logo URL directly - either a Vercel Blob URL (new web
+// app upload path) or a Drive view URL (legacy CompanySettings.html dialog,
+// which still uploads raw bytes to Drive below).
+var COMPANY_LOGO_PROP = 'companyLogoUrl';
+var DRIVE_LOGO_URL_RE = /^https:\/\/drive\.google\.com\/uc\?export=view&id=(.+)$/;
 
 function getCompanyInfo() {
   var props = PropertiesService.getScriptProperties();
   return {
     name: props.getProperty(COMPANY_PROP_NAME) || 'United Ocean Trading and Services',
-    logoFileId: props.getProperty(COMPANY_LOGO_PROP) || null
+    logoUrl: props.getProperty(COMPANY_LOGO_PROP) || null
   };
 }
 
@@ -14,16 +18,21 @@ function saveCompanyInfo(formData) {
   var name = formData.companyName && String(formData.companyName).trim();
   if (name) props.setProperty(COMPANY_PROP_NAME, name);
 
-  if (formData.logo && typeof formData.logo === 'object' && formData.logo.bytes) {
+  if (typeof formData.logoUrl === 'string' && formData.logoUrl.trim()) {
+    // New web app path: already uploaded to Vercel Blob, just store the URL.
+    props.setProperty(COMPANY_LOGO_PROP, formData.logoUrl.trim());
+  } else if (formData.logo && typeof formData.logo === 'object' && formData.logo.bytes) {
+    // Legacy Sheets-dialog path: upload raw bytes to Drive.
     try {
       var decodedBytes = Utilities.base64Decode(formData.logo.bytes);
       var blob = Utilities.newBlob(decodedBytes, formData.logo.mimeType || 'image/png', 'logo');
       var file = DriveApp.createFile(blob);
-      var oldId = props.getProperty(COMPANY_LOGO_PROP);
-      if (oldId) {
-        try { DriveApp.getFileById(oldId).setTrashed(true); } catch (e) {}
+      var oldUrl = props.getProperty(COMPANY_LOGO_PROP);
+      var oldMatch = oldUrl && oldUrl.match(DRIVE_LOGO_URL_RE);
+      if (oldMatch) {
+        try { DriveApp.getFileById(oldMatch[1]).setTrashed(true); } catch (e) {}
       }
-      props.setProperty(COMPANY_LOGO_PROP, file.getId());
+      props.setProperty(COMPANY_LOGO_PROP, 'https://drive.google.com/uc?export=view&id=' + file.getId());
     } catch (e) {
       return { success: false, error: 'Logo upload failed: ' + e.message };
     }
@@ -34,16 +43,15 @@ function saveCompanyInfo(formData) {
 
 function removeCompanyLogo() {
   var props = PropertiesService.getScriptProperties();
-  var oldId = props.getProperty(COMPANY_LOGO_PROP);
-  if (oldId) {
-    try { DriveApp.getFileById(oldId).setTrashed(true); } catch (e) {}
+  var oldUrl = props.getProperty(COMPANY_LOGO_PROP);
+  var oldMatch = oldUrl && oldUrl.match(DRIVE_LOGO_URL_RE);
+  if (oldMatch) {
+    try { DriveApp.getFileById(oldMatch[1]).setTrashed(true); } catch (e) {}
   }
   props.deleteProperty(COMPANY_LOGO_PROP);
   return { success: true };
 }
 
 function getCompanyLogoUrl() {
-  var id = PropertiesService.getScriptProperties().getProperty(COMPANY_LOGO_PROP);
-  if (!id) return null;
-  return 'https://drive.google.com/uc?export=view&id=' + id;
+  return PropertiesService.getScriptProperties().getProperty(COMPANY_LOGO_PROP) || null;
 }

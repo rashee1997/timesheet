@@ -29,9 +29,9 @@ function openCompanySettings() {
   google.script.run
     .withSuccessHandler(function (info) {
       document.getElementById('companyNameInput').value = info.name || 'United Ocean Trading and Services';
-      if (info.logoFileId) {
+      if (info.logoUrl) {
         var preview = document.getElementById('logoPreview');
-        preview.innerHTML = '<img src="https://drive.google.com/uc?export=view&id=' + info.logoFileId + '" style="max-width:150px;max-height:60px;">';
+        preview.innerHTML = '<img src="' + info.logoUrl + '" style="max-width:150px;max-height:60px;">';
         preview.style.display = 'block';
         document.getElementById('removeLogoBtn').style.display = '';
       } else {

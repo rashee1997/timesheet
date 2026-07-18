@@ -314,7 +314,8 @@ function parseNaturalLanguageEntries(text, sheetName) {
       '5. If the job order is not stated and cannot be inferred, use an empty string "".\n' +
       '6. Never invent employees, dates, or times that are not in the notes. If something essential is missing or ambiguous, skip that entry and add an explanation to "warnings".\n' +
       '7. When you guessed anything (AM vs PM, which month, which person), say so in that entry\u2019s "note" and lower its confidence.\n' +
-      '8. Numbered list format like "1.Rasheedh 8am-4pm" or "2.Ravi 7am-3pm" means each line is one person with their shift. The number is just a list marker, not part of the name.\n\n' +
+      '8. Numbered list format like "1.Rasheedh 8am-4pm" or "2.Ravi 7am-3pm" means each line is one person with their shift. The number is just a list marker, not part of the name.\n' +
+      '9. Job orders can be written in ANY of these forms - handle all of them: (a) inline on a person\'s own line, e.g. "1.Rasheedh 8am-4pm GW"; (b) on its own line by itself (just a site/client/project name, with or without a label like "Job:", "Site:", "For:", "@"), acting as a HEADER that applies to every entry from that point until a new job-order line, a new date line, or the text ends - exactly like how a date line at the top governs all following entries; (c) a header line placed AFTER a whole numbered list, applying retroactively to that entire list when no per-line job orders were given. A job order stated directly on a person\'s own line always overrides a header for that person. Never leave a job order blank just because it appeared on a separate line from the shift details - trace back (or forward) to find the nearest applicable header.\n\n' +
       'Return ONLY a valid JSON object matching this structure:\n' +
       '{\n' +
       '  "entries": [\n' +
@@ -608,7 +609,8 @@ function parseNaturalLanguageEntriesWithImage(text, imageBase64, mimeType, sheet
       '5. If the job order is not stated and cannot be inferred, use an empty string "".\n' +
       '6. Never invent employees, dates, or times that are not in the image/text. If something is missing or ambiguous, skip that entry and add a "warnings" entry.\n' +
       '7. When you guessed anything (AM vs PM, which month, which person), say so in that entry\'s "note" and lower its confidence.\n' +
-      '8. Numbered list format like "1.Rasheedh 8am-4pm" or "2.Ravi 7am-3pm" means each line is one person with their shift. The number is just a list marker, not part of the name.\n\n' +
+      '8. Numbered list format like "1.Rasheedh 8am-4pm" or "2.Ravi 7am-3pm" means each line is one person with their shift. The number is just a list marker, not part of the name.\n' +
+      '9. Job orders can be written in ANY of these forms - handle all of them: (a) inline on a person\'s own line, e.g. "1.Rasheedh 8am-4pm GW"; (b) on its own line by itself (just a site/client/project name, with or without a label like "Job:", "Site:", "For:", "@"), acting as a HEADER that applies to every entry from that point until a new job-order line, a new date line, or the text ends - exactly like how a date line at the top governs all following entries; (c) a header line placed AFTER a whole numbered list, applying retroactively to that entire list when no per-line job orders were given. A job order stated directly on a person\'s own line always overrides a header for that person. Never leave a job order blank just because it appeared on a separate line from the shift details - trace back (or forward) to find the nearest applicable header.\n\n' +
       'Return ONLY a valid JSON object matching this structure:\n' +
       '{\n' +
       '  "entries": [\n' +

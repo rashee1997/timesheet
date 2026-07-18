@@ -348,7 +348,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
       errors.push(label + ' (' + headerName + '): job order text is too long (max 200 characters).');
       return;
     }
-    jobOrder = sanitizeSheetText(jobOrder);
+    jobOrder = sanitizeSheetText(jobOrder.toUpperCase());
 
     totalHoursSum += totalHrs;
     validated.push({

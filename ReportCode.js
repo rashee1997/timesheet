@@ -492,7 +492,8 @@ function processSendReport(payload) {
   var attachments = [];
   if (payload.attachPdf) {
     try {
-      attachments = buildReportExcel(report);
+      var scan = collectTimesheetEntries(payload.startDate, payload.endDate);
+      attachments = buildReportExcel(report, scan.entries);
     } catch (xlsxErr) {
       Logger.log('Excel generation failed: ' + xlsxErr);
       throw new Error('Excel generation failed: ' + (xlsxErr.message || xlsxErr) +

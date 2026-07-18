@@ -321,17 +321,18 @@ function coreProcessEntries(sheet, rawEntries, flags) {
     }
     seenKeys[dupKey] = true;
 
-    // Soft warnings — always include the time preview (start → end, total hrs)
-    // so the confirmation reads like the sheet row it's about to write.
-    var timePreview = raw.startTime + ' → ' + raw.endTime + ' (' + totalHrs.toFixed(1) + ' hrs)';
+    // Soft warnings — keep the row data (not just a pre-formatted string) so the
+    // confirmation can be rendered as a real table, with a time preview like the
+    // sheet row it's about to write.
+    var warnRow = { employee: headerName, date: formatDDMMYYYY(date), start: raw.startTime, end: raw.endTime, hours: totalHrs };
     if (detected && (detected.monthIndex !== date.getMonth() || detected.year !== date.getFullYear())) {
-      warnMonth.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview);
+      warnMonth.push(warnRow);
     }
     if (totalHrs > CONFIG.MAX_REASONABLE_HOURS) {
-      warnLong.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview);
+      warnLong.push(warnRow);
     }
     if (overnight) {
-      warnOvernight.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview + ', next day');
+      warnOvernight.push(warnRow);
     }
 
     // Overwrite check across the WHOLE 6-column block (in memory)
@@ -342,7 +343,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
       if (v !== '' && v !== null && v !== undefined) { hasExisting = true; break; }
     }
     if (hasExisting) {
-      warnOverwrite.push('  • ' + headerName + ' on ' + formatDDMMYYYY(date) + ' — ' + timePreview);
+      warnOverwrite.push(warnRow);
     }
 
     let jobOrder = raw.jobOrder ? String(raw.jobOrder).trim() : '';
@@ -368,25 +369,32 @@ function coreProcessEntries(sheet, rawEntries, flags) {
   }
 
   // ---- Soft warnings: ONE combined confirmation ----
-  const sections = [];
+  function formatWarnRow(r) {
+    return '  • ' + r.employee + ' on ' + r.date + ' — ' + r.start + ' → ' + r.end + ' (' + r.hours.toFixed(1) + ' hrs)';
+  }
+  const warningGroups = [];
   if (warnMonth.length > 0) {
-    sections.push('📅 Outside the "' + sheet.getName() + '" month window:\n' + warnMonth.join('\n'));
+    warningGroups.push({ icon: '📅', title: 'Outside the "' + sheet.getName() + '" month window', rows: warnMonth });
   }
   if (warnLong.length > 0) {
-    sections.push('⏱ Unusually long shifts (over ' + CONFIG.MAX_REASONABLE_HOURS + ' hrs):\n' + warnLong.join('\n'));
+    warningGroups.push({ icon: '⏱', title: 'Unusually long shifts (over ' + CONFIG.MAX_REASONABLE_HOURS + ' hrs)', rows: warnLong });
   }
   if (warnOvernight.length > 0) {
-    sections.push('🌙 Crosses midnight — double-check these aren\u2019t AM/PM typos:\n' + warnOvernight.join('\n'));
+    warningGroups.push({ icon: '🌙', title: 'Crosses midnight — double-check these aren’t AM/PM typos', rows: warnOvernight });
   }
   if (warnOverwrite.length > 0) {
-    sections.push('⚠ Existing entries will be OVERWRITTEN:\n' + warnOverwrite.join('\n'));
+    warningGroups.push({ icon: '⚠', title: 'Existing entries will be OVERWRITTEN', rows: warnOverwrite });
   }
+  const sections = warningGroups.map(function (g) {
+    return g.icon + ' ' + g.title + ':\n' + g.rows.map(formatWarnRow).join('\n');
+  });
 
   if (sections.length > 0 && !flags.confirmWarnings) {
     return {
       success: false,
       needsConfirmation: true,
       confirmType: 'combined',
+      warningGroups: warningGroups,
       message: sections.join('\n\n') + '\n\nSave anyway?'
     };
   }

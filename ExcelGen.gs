@@ -108,6 +108,14 @@ function buildSummaryTab_(sheet, info, report) {
     sheet.getRange(headerRow + 1, 1, data.length, COLS).setValues(data).setFontSize(9);
     sheet.getRange(headerRow + 1, 2, data.length, 3).setNumberFormat('0.00').setHorizontalAlignment('right');
     sheet.getRange(headerRow + 1, 5, data.length, 1).setNumberFormat('0').setHorizontalAlignment('right');
+
+    // Total Hrs is a live formula (Normal + OT), not a pre-computed value.
+    var summaryFirstRow = headerRow + 1;
+    var totalHrsFormulas = data.map(function (_, i) {
+      var r = summaryFirstRow + i;
+      return ['=B' + r + '+C' + r];
+    });
+    sheet.getRange(summaryFirstRow, 4, data.length, 1).setFormulas(totalHrsFormulas);
   }
   styleReportTable(sheet, headerRow, COLS, data.length, 1);
 
@@ -125,10 +133,18 @@ function buildSummaryTab_(sheet, info, report) {
   // Charts need at least one employee row - an empty report gets no chart
   // source table and no charts, just the (empty) totals table above.
   if (data.length > 0) {
+    var summaryLastRow = headerRow + data.length;
+
+    // Pie source is a live SUM over the table's Normal Hrs / OT Hrs columns,
+    // not a pre-computed value. pieData (plain numbers) is kept only as a
+    // width-fit reference for setColumnWidthsToFitContent below.
     var pieHeaders = ['Split', 'Hours'];
     var pieData = [['Normal', round2(normalHours)], ['OT', round2(otHours)]];
     sheet.getRange(headerRow, 8, 1, 2).setValues([pieHeaders]);
-    sheet.getRange(headerRow + 1, 8, 2, 2).setValues(pieData);
+    sheet.getRange(headerRow + 1, 8, 1, 1).setValue('Normal');
+    sheet.getRange(headerRow + 2, 8, 1, 1).setValue('OT');
+    sheet.getRange(headerRow + 1, 9, 1, 1).setFormula('=SUM(B' + summaryFirstRow + ':B' + summaryLastRow + ')');
+    sheet.getRange(headerRow + 2, 9, 1, 1).setFormula('=SUM(C' + summaryFirstRow + ':C' + summaryLastRow + ')');
     styleReportTable(sheet, headerRow, 2, pieData.length, 8);
     setColumnWidthsToFitContent(sheet, 2, pieHeaders, pieData, 8);
 
@@ -197,11 +213,25 @@ function buildEmployeeTab_(sheet, row, empEntries, report) {
   sheet.getRange(headerRow + 1, 1, data.length, 5).setHorizontalAlignment('center');
   sheet.getRange(headerRow + 1, 6, data.length, 3).setNumberFormat('0.00').setHorizontalAlignment('right');
 
-  var totalsRow = headerRow + 1 + data.length;
+  // Total (col H) is a live formula (Normal + OT), not a pre-computed value.
+  var empFirstRow = headerRow + 1;
+  var empLastRow = headerRow + data.length;
+  var totalFormulas = data.map(function (_, i) {
+    var r = empFirstRow + i;
+    return ['=F' + r + '+G' + r];
+  });
+  sheet.getRange(empFirstRow, 8, data.length, 1).setFormulas(totalFormulas);
+
+  var totalsRow = empLastRow + 1;
   sheet.getRange(totalsRow, 1, 1, 5).merge().setValue('Total (' + row.daysWorked + ' day(s))')
     .setFontWeight('bold').setFontSize(9).setHorizontalAlignment('right');
+  // Normal/OT/Total on the totals row are live SUM formulas over the data rows.
   sheet.getRange(totalsRow, 6, 1, 3)
-    .setValues([[row.normalHours, row.otHours, row.totalHours]])
+    .setFormulas([[
+      '=SUM(F' + empFirstRow + ':F' + empLastRow + ')',
+      '=SUM(G' + empFirstRow + ':G' + empLastRow + ')',
+      '=SUM(H' + empFirstRow + ':H' + empLastRow + ')'
+    ]])
     .setFontWeight('bold').setFontSize(9).setNumberFormat('0.00').setHorizontalAlignment('right');
 
   // Border box covers header + data + totals row.

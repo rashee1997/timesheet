@@ -124,9 +124,11 @@ function generateOtReport(startDateStr, endDateStr, selectedEmployees) {
   const startStr = Utilities.formatDate(startDate, tz, 'yyyy-MM-dd');
   const endStr = Utilities.formatDate(endDate, tz, 'yyyy-MM-dd');
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // Reuses the same (cached) sheet scan as listTimesheetEntries instead of
+  // independently re-reading every sheet - see EntriesList.gs.
+  const scan = collectTimesheetEntries(startDateStr, endDateStr);
   const totals = {};
-  const skippedSheets = [];
+  const skippedSheets = scan.skippedSheets;
   // Latest date (yyyy-MM-dd) where ANY employee - filtered or not - has an
   // actual logged entry, across every timesheet sheet.
   let latestDataDateStr = null;
@@ -139,116 +141,31 @@ function generateOtReport(startDateStr, endDateStr, selectedEmployees) {
   }
   const hasFilter = Object.keys(selectedKeys).length > 0;
 
-  ss.getSheets().forEach(function (sheet) {
-    let sheetName = '(unknown sheet)';
-    try {
-      sheetName = sheet.getName();
-      if (!isTimesheetSheet(sheet)) return;
-
-      const lastRow = sheet.getLastRow();
-      const lastCol = sheet.getLastColumn();
-      if (lastRow < CONFIG.DATA_START_ROW) return;
-
-      // allEmployeeCols = every employee on this sheet (used for the data-frontier
-      // check). employeeCols = only those matching the filter (used for totals).
-      // findEmployeeBlocks (Code.js) reads row LABEL_ROW for "START" rather than
-      // assuming a rigid column grid, so an off-grid employee block still gets found.
-      const allEmployeeCols = [];
-      const employeeCols = [];
-      findEmployeeBlocks(sheet).forEach(function (emp) {
-        const key = normalizeNameKey(emp.name);
-        const empEntry = { name: emp.name, key: key, startCol: emp.column };
-        allEmployeeCols.push(empEntry);
-
-        if (hasFilter && !selectedKeys[key]) return;
-        employeeCols.push(empEntry);
-      });
-      if (allEmployeeCols.length === 0) return;
-
-      const numRows = lastRow - CONFIG.DATA_START_ROW + 1;
-      const data = sheet
-        .getRange(CONFIG.DATA_START_ROW, 1, numRows, lastCol)
-        .getValues();
-
-      data.forEach(function (row) {
-        const rowDate = parseCellDate(row[0]);
-        if (!rowDate || isNaN(rowDate.getTime())) return;
-
-        const rowDateStr = Utilities.formatDate(rowDate, tz, 'yyyy-MM-dd');
-        if (rowDateStr < startStr || rowDateStr > endStr) return;
-
-        // Data-frontier check runs over EVERY employee on the sheet, not just
-        // the filtered set.
-        allEmployeeCols.forEach(function (emp) {
-          const idx = emp.startCol - 1;
-          if (idx + 1 >= row.length) return;
-          let h;
-          try {
-            h = getHoursBetweenTimes(row[idx], row[idx + 1]);
-          } catch (e) {
-            return;
-          }
-          if (h > 0 && (!latestDataDateStr || rowDateStr > latestDataDateStr)) {
-            latestDataDateStr = rowDateStr;
-          }
-        });
-
-        employeeCols.forEach(function (emp) {
-          const idx = emp.startCol - 1;
-          if (idx + 1 >= row.length) return;
-
-          const startVal = row[idx];
-          const endVal = row[idx + 1];
-
-          let totalHours;
-          try {
-            totalHours = getHoursBetweenTimes(startVal, endVal);
-          } catch (timeErr) {
-            Logger.log('Time parse error on sheet "' + sheetName + '" row date ' + rowDateStr + ' for ' + emp.name + ': ' + timeErr);
-            return;
-          }
-
-          if (!totalHours || totalHours <= 0) return;
-
-          // Sanity cap: a single shift over 20h almost certainly means bad data.
-          if (totalHours > 20) {
-            Logger.log('Suspicious shift length (' + totalHours.toFixed(2) + 'h) for ' + emp.name +
-              ' on ' + rowDateStr + ' in sheet "' + sheetName + '" - included as-is, please verify source data.');
-          }
-
-          let normalHours = 0;
-          let otHours = 0;
-          if (rowDate.getDay() === 5) { // Friday = rest day
-            otHours = totalHours;
-          } else {
-            normalHours = Math.min(8, totalHours);
-            otHours = totalHours > 8 ? totalHours - 8 : 0;
-          }
-
-          if (!totals[emp.key]) {
-            totals[emp.key] = {
-              displayName: emp.name,
-              normal: 0,
-              ot: 0,
-              days: 0,
-              firstDate: rowDate,
-              lastDate: rowDate
-            };
-          }
-
-          const t = totals[emp.key];
-          t.normal += normalHours;
-          t.ot += otHours;
-          t.days++;
-          if (rowDate < t.firstDate) t.firstDate = rowDate;
-          if (rowDate > t.lastDate) t.lastDate = rowDate;
-        });
-      });
-    } catch (sheetErr) {
-      // One bad sheet should never take down the whole report.
-      Logger.log('generateOtReport: skipped sheet "' + sheetName + '" due to error: ' + sheetErr);
-      skippedSheets.push(sheetName);
+  scan.entries.forEach(function (e) {
+    // Data-frontier check runs over EVERY employee, not just the filtered set.
+    if (!latestDataDateStr || e.date > latestDataDateStr) {
+      latestDataDateStr = e.date;
     }
+
+    if (hasFilter && !selectedKeys[e.employeeKey]) return;
+
+    if (!totals[e.employeeKey]) {
+      totals[e.employeeKey] = {
+        displayName: e.employeeName,
+        normal: 0,
+        ot: 0,
+        days: 0,
+        firstDate: e.date,
+        lastDate: e.date
+      };
+    }
+
+    const t = totals[e.employeeKey];
+    t.normal += e.normalHours;
+    t.ot += e.otHours;
+    t.days++;
+    if (e.date < t.firstDate) t.firstDate = e.date;
+    if (e.date > t.lastDate) t.lastDate = e.date;
   });
 
   const rangeCalendarDays = Math.round(
@@ -297,8 +214,8 @@ function generateOtReport(startDateStr, endDateStr, selectedEmployees) {
         otHours: round2(t.ot),
         totalHours: round2(t.normal + t.ot),
         daysWorked: t.days,
-        firstEntry: formatDDMMYYYY(t.firstDate),
-        lastEntry: formatDDMMYYYY(t.lastDate),
+        firstEntry: formatDDMMYYYY(parseIsoDate(t.firstDate)),
+        lastEntry: formatDDMMYYYY(parseIsoDate(t.lastDate)),
         partialCoverage: expectedCalendarDays >= MIN_EVALUABLE_DAYS &&
           gap >= MIN_ABSOLUTE_GAP_DAYS &&
           t.days < expectedCalendarDays * (1 - ABSENCE_TOLERANCE_RATIO)

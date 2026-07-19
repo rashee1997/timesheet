@@ -8,8 +8,13 @@
 /**
  * Raw per-shift rows for every employee across all timesheet sheets touching
  * [startDate, endDate], unfiltered and unpaginated. Shared by
- * listTimesheetEntries (which filters/sorts/paginates on top of this) and
+ * listTimesheetEntries (which filters/sorts/paginates on top of this),
+ * generateOtReport (which aggregates it into per-employee totals), and
  * buildReportExcel (which groups rows by employee for per-employee tabs).
+ *
+ * Cached per date range (CacheService, 60s TTL) so the several near-simultaneous
+ * calls one page load makes (paginated entries list + OT report preview) share
+ * one sheet scan instead of each re-reading every sheet from scratch.
  *
  * @param {string} startDateStr yyyy-MM-dd
  * @param {string} endDateStr   yyyy-MM-dd
@@ -22,6 +27,65 @@ function collectTimesheetEntries(startDateStr, endDateStr) {
     throw new Error('Start date must be on or before the end date.');
   }
 
+  return getCachedTimesheetScan_('scan_' + startDateStr + '_' + endDateStr, function () {
+    return scanTimesheetEntries_(startDate, endDate);
+  });
+}
+
+/** ponytail: 60s TTL over exact write-time invalidation of every date-range key; raise if staleness ever bites. */
+var TIMESHEET_SCAN_CACHE_TTL_SEC = 60;
+var TIMESHEET_SCAN_CACHE_INDEX_KEY = '_timesheetScanCacheKeys';
+
+/**
+ * Cache-or-compute wrapper around a sheet scan. Mirrors the common Apps Script
+ * CacheService pattern (get -> miss -> compute -> put, size-guarded under the
+ * 100KB/entry cache limit) so callers don't need to know caching exists.
+ */
+function getCachedTimesheetScan_(cacheKey, computeFn) {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(cacheKey);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      // fall through and recompute on a corrupt/incompatible cache entry
+    }
+  }
+
+  var fresh = computeFn();
+
+  try {
+    var serialized = JSON.stringify(fresh);
+    if (serialized.length < 95000) { // Apps Script caps each cache entry at 100KB
+      cache.put(cacheKey, serialized, TIMESHEET_SCAN_CACHE_TTL_SEC);
+      var indexRaw = cache.get(TIMESHEET_SCAN_CACHE_INDEX_KEY);
+      var index = indexRaw ? JSON.parse(indexRaw) : [];
+      if (index.indexOf(cacheKey) === -1) {
+        index.push(cacheKey);
+        cache.put(TIMESHEET_SCAN_CACHE_INDEX_KEY, JSON.stringify(index), TIMESHEET_SCAN_CACHE_TTL_SEC);
+      }
+    }
+  } catch (e) {
+    // cache write failures are non-fatal - fresh data is already computed
+  }
+
+  return fresh;
+}
+
+/** Called right after a save/undo commits so the next read isn't served stale data from within the TTL window. */
+function invalidateTimesheetScanCache_() {
+  var cache = CacheService.getScriptCache();
+  var indexRaw = cache.get(TIMESHEET_SCAN_CACHE_INDEX_KEY);
+  if (!indexRaw) return;
+  try {
+    cache.removeAll(JSON.parse(indexRaw));
+  } catch (e) {
+    // ignore - worst case the TTL expires it within 60s anyway
+  }
+  cache.remove(TIMESHEET_SCAN_CACHE_INDEX_KEY);
+}
+
+function scanTimesheetEntries_(startDate, endDate) {
   var tz = Session.getScriptTimeZone();
   var startStr = Utilities.formatDate(startDate, tz, 'yyyy-MM-dd');
   var endStr = Utilities.formatDate(endDate, tz, 'yyyy-MM-dd');

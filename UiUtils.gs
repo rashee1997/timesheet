@@ -42,7 +42,18 @@ function getRecentEntriesPreview(sheetName) {
   }
 }
 
+/**
+ * Distinct job order values across every timesheet sheet, most-used first.
+ * Cached (same CacheService pattern as collectTimesheetEntries in
+ * EntriesList.gs) since this has no date-range shortcut - every call scans
+ * every historical sheet in full, and the entry form re-triggers it on
+ * every mount.
+ */
 function getJobOrdersByFrequency() {
+  return getCachedTimesheetScan_('jobOrderFrequency', scanJobOrdersByFrequency_);
+}
+
+function scanJobOrdersByFrequency_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const freq = {};
 

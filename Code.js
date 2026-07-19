@@ -418,6 +418,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
   } finally {
     lock.releaseLock();
   }
+  invalidateTimesheetScanCache_();
 
   saveUndoData(sheet.getName(), undoEntries);
   validated.forEach(function (entry) {

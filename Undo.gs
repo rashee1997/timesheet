@@ -41,6 +41,7 @@ function undoLastSave(actorEmail) {
     });
 
     SpreadsheetApp.flush();
+    invalidateTimesheetScanCache_();
     PropertiesService.getScriptProperties().deleteProperty(UNDO_PROPERTY_KEY);
     logAudit('undo', data.sheetName, null, null, 'Undid ' + restored + ' entry blocks', actorEmail);
     return { success: true, message: 'Undid last save (' + restored + ' entries restored).' };

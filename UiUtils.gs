@@ -29,9 +29,7 @@ function getRecentEntriesPreview(sheetName) {
         var endCell = data[r][col];
         var jobCell = data[r][col + 5 - 1];
         if (startCell && endCell) {
-          var startStr = typeof startCell === 'string' ? startCell : Utilities.formatDate(startCell, tz, 'HH:mm');
-          var endStr = typeof endCell === 'string' ? endCell : Utilities.formatDate(endCell, tz, 'HH:mm');
-          results.push({ date: dateStr, name: name, start: startStr, end: endStr, job: jobCell || '' });
+          results.push({ date: dateStr, name: name, start: formatTimeCell(startCell, tz), end: formatTimeCell(endCell, tz), job: jobCell || '' });
         }
       }
     }

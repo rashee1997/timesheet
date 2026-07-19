@@ -357,6 +357,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
     validated.push({
       targetRow: targetRow,
       employeeColumn: empCol,
+      employeeName: headerName,
       startTime: start,
       endTime: end,
       jobOrder: jobOrder
@@ -372,19 +373,12 @@ function coreProcessEntries(sheet, rawEntries, flags) {
   function formatWarnRow(r) {
     return '  • ' + r.employee + ' on ' + r.date + ' — ' + r.start + ' → ' + r.end + ' (' + r.hours.toFixed(1) + ' hrs)';
   }
-  const warningGroups = [];
-  if (warnMonth.length > 0) {
-    warningGroups.push({ icon: '📅', title: 'Outside the "' + sheet.getName() + '" month window', rows: warnMonth });
-  }
-  if (warnLong.length > 0) {
-    warningGroups.push({ icon: '⏱', title: 'Unusually long shifts (over ' + CONFIG.MAX_REASONABLE_HOURS + ' hrs)', rows: warnLong });
-  }
-  if (warnOvernight.length > 0) {
-    warningGroups.push({ icon: '🌙', title: 'Crosses midnight — double-check these aren’t AM/PM typos', rows: warnOvernight });
-  }
-  if (warnOverwrite.length > 0) {
-    warningGroups.push({ icon: '⚠', title: 'Existing entries will be OVERWRITTEN', rows: warnOverwrite });
-  }
+  const warningGroups = [
+    { icon: '📅', title: 'Outside the "' + sheet.getName() + '" month window', rows: warnMonth },
+    { icon: '⏱', title: 'Unusually long shifts (over ' + CONFIG.MAX_REASONABLE_HOURS + ' hrs)', rows: warnLong },
+    { icon: '🌙', title: 'Crosses midnight — double-check these aren’t AM/PM typos', rows: warnOvernight },
+    { icon: '⚠', title: 'Existing entries will be OVERWRITTEN', rows: warnOverwrite }
+  ].filter(function (g) { return g.rows.length > 0; });
   const sections = warningGroups.map(function (g) {
     return g.icon + ' ' + g.title + ':\n' + g.rows.map(formatWarnRow).join('\n');
   });
@@ -407,10 +401,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
   var undoEntries = [];
   try {
     validated.forEach(function (entry) {
-      var prevValues = [];
-      try {
-        prevValues = sheet.getRange(entry.targetRow, entry.employeeColumn, 1, CONFIG.COLS_PER_EMPLOYEE).getValues()[0];
-      } catch (e) { prevValues = []; }
+      var prevValues = allValues[entry.targetRow - 1].slice(entry.employeeColumn - 1, entry.employeeColumn - 1 + CONFIG.COLS_PER_EMPLOYEE);
       undoEntries.push({ targetRow: entry.targetRow, employeeColumn: entry.employeeColumn, prevValues: prevValues });
       writeFormulaRow(sheet, entry.targetRow, entry.employeeColumn, entry.startTime, entry.endTime, entry.jobOrder);
     });
@@ -422,7 +413,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
 
   saveUndoData(sheet.getName(), undoEntries);
   validated.forEach(function (entry) {
-    logAudit('write', sheet.getName(), entry.targetRow, getEmployeeNameAtColumn(sheet, entry.employeeColumn),
+    logAudit('write', sheet.getName(), entry.targetRow, entry.employeeName,
       entry.startTime + '-' + entry.endTime + ' ' + (entry.jobOrder || ''), flags.actorEmail);
   });
 
@@ -623,25 +614,6 @@ function parseTimeString(t) {
   return new Date(1899, 11, 30, h, m, 0);
 }
 
-function findRowForDate(sheet, date) {
-  const tz = Session.getScriptTimeZone();
-  const targetStr = Utilities.formatDate(date, tz, 'yyyy-MM-dd');
-  const lastRow = sheet.getLastRow();
-  if (lastRow < CONFIG.DATA_START_ROW) return -1;
-
-  const dateValues = sheet
-    .getRange(CONFIG.DATA_START_ROW, CONFIG.DATE_COL, lastRow - CONFIG.DATA_START_ROW + 1, 1)
-    .getValues();
-
-  for (let i = 0; i < dateValues.length; i++) {
-    const cell = parseCellDate(dateValues[i][0]);
-    if (cell && Utilities.formatDate(cell, tz, 'yyyy-MM-dd') === targetStr) {
-      return CONFIG.DATA_START_ROW + i;
-    }
-  }
-  return -1;
-}
-
 function parseCellDate(value) {
   if (value instanceof Date && !isNaN(value.getTime())) return value;
 
@@ -660,19 +632,6 @@ function parseCellDate(value) {
     }
   }
   return null;
-}
-
-function getEmployeeNameAtColumn(sheet, col) {
-  const lastCol = sheet.getLastColumn();
-  const headerRow = sheet.getRange(CONFIG.HEADER_ROW, 1, 1, lastCol).getValues()[0];
-  for (let c = col - 1; c >= 0; c--) {
-    if (headerRow[c] && String(headerRow[c]).trim() !== '') return String(headerRow[c]).trim();
-  }
-  return 'Column ' + col;
-}
-
-function formatMonthYear(date) {
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'MMMM yyyy');
 }
 
 function formatDDMMYYYY(date) {

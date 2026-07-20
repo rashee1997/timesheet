@@ -436,7 +436,8 @@ function processSendReport(payload) {
 
   // Create an in-app notification for the sender
   try {
-    createNotification(Session.getActiveUser().getEmail(),
+    var notifEmail = payload.actorEmail || Session.getActiveUser().getEmail();
+    createNotification(notifEmail,
       'Sent OT report ' + report.startDate + ' to ' + report.endDate +
       ' to ' + uniqueEmails.length + ' recipient(s) — ' + report.rows.length + ' employee(s) covered.' +
       (attachments.length > 0 ? ' (Excel attached)' : ''),

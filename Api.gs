@@ -43,7 +43,9 @@ var API_ACTIONS = {
   getAllEmployees: function () { return getAllEmployees(); },
   searchContacts: function (p) { return searchContacts(p.query); },
   previewOtReport: function (p) { return previewOtReport(p.startDate, p.endDate, p.selectedEmployees); },
-  sendOtReport: function (p) { return sendOtReport(p); },
+  sendOtReport: function (p, actorEmail) {
+    return sendOtReport(Object.assign({}, p, { actorEmail: actorEmail }));
+  },
   getScheduledReportConfig: function () { return getScheduledReportConfig(); },
   setScheduledReportConfig: function (p) { return setScheduledReportConfig(p.config); },
   disableScheduledReport: function () { return disableScheduledReport(); },

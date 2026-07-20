@@ -417,6 +417,21 @@ function coreProcessEntries(sheet, rawEntries, flags) {
       entry.startTime + '-' + entry.endTime + ' ' + (entry.jobOrder || ''), flags.actorEmail);
   });
 
+  // Create an in-app notification for the actor
+  try {
+    var entrySummary = validated.map(function (e) {
+      return e.employeeName + ' ' + Utilities.formatDate(e.startTime, Session.getScriptTimeZone(), 'HH:mm') +
+        '-' + Utilities.formatDate(e.endTime, Session.getScriptTimeZone(), 'HH:mm') +
+        (e.jobOrder ? ' (' + e.jobOrder + ')' : '');
+    }).join('; ');
+    createNotification(flags.actorEmail,
+      'Saved ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +
+      ' (' + totalHoursSum.toFixed(1) + ' hrs) on ' + sheet.getName() + ': ' + entrySummary,
+      'timesheet_approved', '');
+  } catch (notifErr) {
+    Logger.log('Failed to create notification: ' + notifErr);
+  }
+
   return {
     success: true,
     message: 'Saved ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +

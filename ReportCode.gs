@@ -434,6 +434,17 @@ function processSendReport(payload) {
 
   logAudit('send', null, null, null, 'Sent report ' + report.startDate + '-' + report.endDate + ' to ' + uniqueEmails.length + ' recipients' + (payload.attachPdf ? ' with Excel' : ''));
 
+  // Create an in-app notification for the sender
+  try {
+    createNotification(Session.getActiveUser().getEmail(),
+      'Sent OT report ' + report.startDate + ' to ' + report.endDate +
+      ' to ' + uniqueEmails.length + ' recipient(s) — ' + report.rows.length + ' employee(s) covered.' +
+      (attachments.length > 0 ? ' (Excel attached)' : ''),
+      'info', '');
+  } catch (notifErr) {
+    Logger.log('Failed to create notification: ' + notifErr);
+  }
+
   let msg = 'Sent to ' + uniqueEmails.length + ' recipient(s) - ' + report.rows.length + ' employee(s) covered.';
   if (attachments.length > 0) msg += ' (Excel attached)';
   if (report.skippedSheets && report.skippedSheets.length > 0) {

@@ -1,3 +1,5 @@
+var DEFAULT_FONT = 'Century Gothic';
+
 function setColumnWidthsToFitContent(sheet, numCols, headers, data, startCol) {
   startCol = startCol || 1;
   var PX_PER_CHAR = 7;
@@ -82,6 +84,9 @@ function buildSummaryTab_(sheet, info, report) {
   var otHours = report.rows.reduce(function (s, r) { return s + r.otHours; }, 0);
   var totalHours = normalHours + otHours;
   var otShare = totalHours > 0 ? (otHours / totalHours) * 100 : 0;
+
+  // Set Century Gothic as the default font for the entire sheet
+  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setFontFamily(DEFAULT_FONT);
 
   sheet.getRange(1, 1, 1, COLS).merge().setValue(info.name)
     .setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
@@ -170,6 +175,7 @@ function buildSummaryTab_(sheet, info, report) {
       .setOption('title', 'Hours by employee — Normal vs OT')
       .setOption('isStacked', true)
       .setOption('legend', { position: 'top' })
+      .setOption('fontName', DEFAULT_FONT)
       .setOption('width', 640)
       .setOption('height', 320)
       .setPosition(headerRow, 11, 0, 0)
@@ -181,6 +187,7 @@ function buildSummaryTab_(sheet, info, report) {
       .addRange(sheet.getRange(headerRow, 8, 3, 2))
       .setNumHeaders(1)
       .setOption('title', 'OT share of total hours')
+      .setOption('fontName', DEFAULT_FONT)
       .setOption('width', 360)
       .setOption('height', 320)
       .setPosition(headerRow + 17, 11, 0, 0)
@@ -192,6 +199,9 @@ function buildSummaryTab_(sheet, info, report) {
 function buildEmployeeTab_(sheet, row, empEntries, report) {
   var COLS = 8;
   var tz = Session.getScriptTimeZone();
+
+  // Set Century Gothic as the default font for the entire sheet
+  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setFontFamily(DEFAULT_FONT);
 
   sheet.getRange(1, 1, 1, COLS).merge().setValue(row.name)
     .setFontSize(14).setFontWeight('bold').setHorizontalAlignment('center');

@@ -55,7 +55,11 @@ var API_ACTIONS = {
   listTimesheetEntries: function (p) { return listTimesheetEntries(p); },
 
   // ---- Phase 4: dashboard ----
-  getRecentAuditEntries: function (p) { return getRecentAuditEntries(p && p.limit); }
+  getRecentAuditEntries: function (p) { return getRecentAuditEntries(p && p.limit); },
+
+  // ---- Phase 5: Notifications ----
+  getNotifications: function (p) { return getNotifications(p.userEmail, p.includeRead); },
+  markNotificationsAsRead: function (p) { return markNotificationsAsRead(p.notificationIds); }
 };
 
 function doPost(e) {

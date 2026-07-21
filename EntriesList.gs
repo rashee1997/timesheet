@@ -215,7 +215,7 @@ function listTimesheetEntries(filters) {
   var search = filters.search ? String(filters.search).trim() : '';
 
   var page = Math.max(1, parseInt(filters.page, 10) || 1);
-  var pageSize = Math.min(100, Math.max(1, parseInt(filters.pageSize, 10) || 25));
+  var pageSize = Math.min(1000, Math.max(1, parseInt(filters.pageSize, 10) || 25));
 
   var filtered = scan.entries.filter(function (e) {
     if (selectedKeys && !selectedKeys[e.employeeKey]) return false;

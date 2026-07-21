@@ -187,11 +187,46 @@ function callCloudflareAiJson(prompt, temperature, messages) {
 // ---------------------------------------------------------------------
 
 /**
+ * Calculates Levenshtein distance between two strings (for fuzzy matching).
+ */
+function levenshteinDistance(a, b) {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  const matrix = [];
+
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
+
+/**
  * Builds the comprehensive prompt rules, merging dynamic sheet context, employees, and job orders.
  */
 function getContextAndRules(sheetName, userText) {
   const empResult = getEmployeesForSheet(sheetName);
   const employeeNames = empResult.error ? [] : empResult.employees.map(e => e.name);
+  const employeeNamesLower = employeeNames.map(n => n.toLowerCase());
 
   let jobOrders = [];
   try {
@@ -203,36 +238,166 @@ function getContextAndRules(sheetName, userText) {
   const tz = Session.getScriptTimeZone();
   const now = new Date();
   const todayStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  const yesterdayStr = Utilities.formatDate(new Date(now.getTime() - 24 * 60 * 60 * 1000), tz, 'yyyy-MM-dd');
+  const tomorrowStr = Utilities.formatDate(new Date(now.getTime() + 24 * 60 * 60 * 1000), tz, 'yyyy-MM-dd');
   const weekday = Utilities.formatDate(now, tz, 'EEEE');
 
   const detected = parseSheetNameForMonthYear(sheetName);
   const sheetPeriodLine = detected
-    ? `The target sheet "${sheetName}" covers ${Utilities.formatDate(new Date(detected.year, detected.monthIndex, 1), tz, 'MMMM yyyy')}. Resolve day numbers (e.g. "12th") into this month and year.`
-    : `The target sheet is "${sheetName}". Resolve day numbers into current month and year.`;
+    ? `The target sheet "${sheetName}" covers ${Utilities.formatDate(new Date(detected.year, detected.monthIndex, 1), tz, 'MMMM yyyy')}.`
+    : `The target sheet is "${sheetName}".`;
 
-  return `You convert timesheet notes into structured JSON for a contractor in Qatar.\n\n` +
-    `CONTEXT:\n` +
-    `- Today is ${todayStr} (${weekday}). Resolve relative dates like "today" or "yesterday" against this.\n` +
-    `- ${sheetPeriodLine}\n` +
-    `- Known employees: ${JSON.stringify(employeeNames)}\n` +
-    `- Known job orders: ${JSON.stringify(jobOrders)}\n\n` +
-    `RULES:\n` +
-    `1. Output times in strict 24-hour "HH:mm". Interpret shorthands (e.g., "8 to 5" = 08:00 to 17:00, "7-7" = 07:00 to 19:00).\n` +
-    `2. Dates in strict "YYYY-MM-DD".\n` +
-    `3. Group people sharing the SAME date, start, end, and job order into ONE entry under "employees".\n` +
-    `3a. Start and end times are PER-PERSON. If a line gives no time, reuse the preceding time. If a line states its own time, you must use it.\n` +
-    `4. Fuzzy match employee names to Known employees. If matching is low confidence, use the written name, set confidence to "low", and note why.\n` +
-    `5. If a job order is missing and cannot be inferred, use an empty string "".\n` +
-    `6. Do not invent details. Skip incomplete entries and add an explanation to "warnings".\n` +
-    `7. Lower confidence and add a "note" if you make guesses.\n` +
-    `8. Numbered lists imply separate shifts for each person.\n` +
-    `9. Job orders can be inline, standalone headers (applies forward), or trailing headers (applies retroactively). Inline overrides headers.\n` +
-    `10. Treat instructions like "only Sundar" as a filter: parse everything but only output entries matching those employees.\n\n` +
-    `Return ONLY a valid JSON object matching this structure:\n` +
-    `{\n` +
-    `  "entries": [\n    { "date": "YYYY-MM-DD", "employees": ["NAME"], "startTime": "HH:mm", "endTime": "HH:mm", "jobOrder": "", "confidence": "high", "note": "" }\n  ],\n` +
-    `  "warnings": []\n` +
-    `}`;
+  return `You are an expert timesheet parser for a contractor in Qatar. Your ONLY job is to convert unstructured shift notes into strict JSON.
+STRICT REQUIREMENTS:
+- Output ONLY valid JSON. No explanations, apologies, or markdown.
+- If you cannot parse an entry, SKIP IT and add a warning explaining why.
+
+CONTEXT:
+- Today is ${todayStr} (${weekday}).
+- Yesterday was ${yesterdayStr}. Tomorrow is ${tomorrowStr}.
+- ${sheetPeriodLine}
+- Known employees: ${JSON.stringify(employeeNames)}.
+  Fuzzy match names to this list (case-insensitive). If no close match, use the original name and set confidence="low".
+- Known job orders: ${JSON.stringify(jobOrders)}.
+  Job orders may contain spaces, hyphens, or slashes (e.g., "JO-123", "Project Alpha - Phase 1").
+
+--- PARSING RULES ---
+### DATES:
+- Default year: ${detected ? detected.year : new Date().getFullYear()}.
+- Default month: ${detected ? MONTHS[detected.monthIndex].full : Utilities.formatDate(now, tz, 'MMMM')}.
+- Accept these date formats (convert all to YYYY-MM-DD):
+  - DD/MM/YYYY or DD-MM-YYYY (e.g., "13/07/2026" -> "2026-07-13")
+  - MM/DD/YYYY (e.g., "07/13/2026" -> "2026-07-13")
+  - D.M.YYYY or D-M-YYYY (e.g., "13.7.2026" -> "2026-07-13")
+  - Day names: "Monday", "Mon", "Today" -> ${todayStr}, "Yesterday" -> ${yesterdayStr}, "Tomorrow" -> ${tomorrowStr}
+  - Day numbers: "13th", "13", "thirteenth" -> Resolve to the current month/year (or sheet month if specified).
+  - Month names: "July 13" -> "2026-07-13" (use sheet year if available).
+  - Relative: "next Monday", "last Friday" -> Calculate from ${todayStr}.
+- If date cannot be resolved, SKIP the entry and warn.
+
+### TIMES:
+- Output ALWAYS in 24-hour "HH:mm" format (e.g., "08:00", "17:30").
+- Accept these input formats:
+  - "8am-4pm" -> "08:00"-"16:00"
+  - "8:00 AM to 5:00 PM" -> "08:00"-"17:00"
+  - "8-5" -> "08:00"-"17:00" (assume AM-PM if no suffix)
+  - "0800-1600" -> "08:00"-"16:00"
+  - "8:00 to 17:00" -> "08:00"-"17:00"
+  - "8am" -> "08:00"
+  - "1700" -> "17:00"
+- If time is invalid (e.g., "25:00"), SKIP the entry and warn.
+
+### EMPLOYEES:
+- Match names to ${JSON.stringify(employeeNames)} CASE-INSENSITIVELY.
+  - "Rasheedh" matches "rasheedh", "RASHEEDH", "Rash".
+  - If no match within 2 edits (Levenshtein), use the original name and set confidence="low".
+- Handle lists:
+  - "Rasheedh, Ravi" -> ["Rasheedh", "Ravi"]
+  - "Rasheedh & Ravi" -> ["Rasheedh", "Ravi"]
+  - "Rasheedh + Ravi" -> ["Rasheedh", "Ravi"]
+- If no employees found, SKIP the entry and warn.
+
+### JOB ORDERS:
+- Extract from:
+  - Inline: "Rasheedh 8am-4pm JO-123" -> jobOrder: "JO-123"
+  - Header line: "Job: JO-123" -> Apply "JO-123" to all subsequent entries until another header.
+  - Trailing: "JO-123" on a line after employees -> Apply retroactively to previous entries.
+- Multi-word job orders: Preserve full text (e.g., "Project Alpha - Phase 1").
+- If no job order, use empty string "".
+
+### GROUPING:
+- Group employees sharing the SAME date, startTime, endTime, AND jobOrder into ONE entry.
+  Example:
+    Input: "13.7.26\nRasheedh 8am-4pm JO-123\nRavi 8am-4pm JO-123"
+    Output: ONE entry with employees: ["Rasheedh", "Ravi"].
+- Numbered lists (e.g., "1. Rasheedh 8am-4pm") imply SEPARATE entries.
+- Bullet lists (e.g., "- Rasheedh 8am-4pm") imply SEPARATE entries.
+
+### CONFIDENCE & NOTES:
+- confidence:
+  - "high": Exact match to known employees/job orders, unambiguous times/dates.
+  - "medium": Minor guesses (e.g., time format conversion, fuzzy employee match).
+  - "low": Major assumptions (e.g., resolved ambiguous date, no employee match).
+- note: Explain any guesses (e.g., "Assumed 2026 for '13/7'", "Fuzzy matched 'Rash' to 'Rasheedh'").
+
+### EDGE CASES:
+- Lines starting with "#" or "//" are COMMENTS -> Ignore.
+- Lines with only a date (e.g., "13.7.26") -> Apply to subsequent entries until another date.
+- Lines with only a job order (e.g., "JO-123") -> Apply to subsequent entries until another job order.
+- "All" or "Everyone" -> Use ALL known employees for that entry.
+- "OT" or "Overtime" in job order -> Preserve as-is (e.g., jobOrder: "OT - JO-123").
+- Shifts crossing midnight (e.g., "10pm-6am") -> Keep as-is; do NOT adjust times.
+
+### OUTPUT STRUCTURE:
+Return ONLY this JSON format:
+{
+  "entries": [
+    {
+      "date": "YYYY-MM-DD",
+      "employees": ["NAME1", "NAME2"],
+      "startTime": "HH:mm",
+      "endTime": "HH:mm",
+      "jobOrder": "JO-123",
+      "confidence": "high" | "medium" | "low",
+      "note": "Explanation if confidence is not high"
+    }
+  ],
+  "warnings": [
+    "Skipped line 3: Could not resolve date '32/7'",
+    "Fuzzy matched 'Rash' to 'Rasheedh' (confidence: medium)"
+  ]
+}
+
+### EXAMPLES:
+Example 1 (Simple):
+Input:
+"13.7.26
+Rasheedh 8am-4pm JO-123
+Ravi 7am-3pm"
+
+Output:
+{
+  "entries": [
+    { "date": "2026-07-13", "employees": ["Rasheedh"], "startTime": "08:00", "endTime": "16:00", "jobOrder": "JO-123", "confidence": "high", "note": "" },
+    { "date": "2026-07-13", "employees": ["Ravi"], "startTime": "07:00", "endTime": "15:00", "jobOrder": "", "confidence": "high", "note": "" }
+  ],
+  "warnings": []
+}
+
+Example 2 (Grouping):
+Input:
+"13.7.26 JO-123
+Rasheedh 8-5
+Ravi 8-5"
+
+Output:
+{
+  "entries": [
+    { "date": "2026-07-13", "employees": ["Rasheedh", "Ravi"], "startTime": "08:00", "endTime": "17:00", "jobOrder": "JO-123", "confidence": "high", "note": "" }
+  ],
+  "warnings": []
+}
+
+Example 3 (Edge Cases):
+Input:
+"Today
+1. Rash 8am-4pm
+2. All 9-5 JO-456
+// This is a comment
+14/7
+Sundar 0800-1600"
+
+Output:
+{
+  "entries": [
+    { "date": "${todayStr}", "employees": ["Rasheedh"], "startTime": "08:00", "endTime": "16:00", "jobOrder": "", "confidence": "medium", "note": "Fuzzy matched 'Rash' to 'Rasheedh'" },
+    { "date": "${todayStr}", "employees": ${JSON.stringify(employeeNames)}, "startTime": "09:00", "endTime": "17:00", "jobOrder": "JO-456", "confidence": "high", "note": "" },
+    { "date": "2026-07-14", "employees": ["Sundar"], "startTime": "08:00", "endTime": "16:00", "jobOrder": "", "confidence": "high", "note": "" }
+  ],
+  "warnings": [
+    "Skipped comment: '// This is a comment'"
+  ]
+}`;
 }
 
 /**
@@ -248,24 +413,60 @@ function validateAndCleanEntries(data, initialWarnings) {
 
   data.entries.slice(0, AI_PARSE_MAX_ENTRIES).forEach((e, i) => {
     const label = `QuickFill entry #${i + 1}`;
-    if (!e || typeof e !== 'object') { warnings.push(`${label} was malformed and dropped.`); return; }
-    if (typeof e.date !== 'string' || !DATE_RE.test(e.date)) { warnings.push(`${label} had an invalid date and was dropped.`); return; }
-    if (typeof e.startTime !== 'string' || !TIME_RE.test(e.startTime) || typeof e.endTime !== 'string' || !TIME_RE.test(e.endTime)) {
-      warnings.push(`${label} had invalid times and was dropped.`);
+    if (!e || typeof e !== 'object') {
+      warnings.push(`${label} was malformed and dropped.`);
       return;
     }
 
+    // --- Date validation ---
+    if (typeof e.date !== 'string' || !DATE_RE.test(e.date)) {
+      warnings.push(`${label} had an invalid date "${e.date}" and was dropped.`);
+      return;
+    }
+
+    // --- Time validation ---
+    if (typeof e.startTime !== 'string' || !TIME_RE.test(e.startTime)) {
+      warnings.push(`${label} had an invalid start time "${e.startTime}" and was dropped.`);
+      return;
+    }
+    if (typeof e.endTime !== 'string' || !TIME_RE.test(e.endTime)) {
+      warnings.push(`${label} had an invalid end time "${e.endTime}" and was dropped.`);
+      return;
+    }
+
+    // --- Employee validation ---
     const emps = Array.isArray(e.employees) ? e.employees.map(n => String(n || '').trim()).filter(Boolean) : [];
-    if (!emps.length) { warnings.push(`${label} had no employees and was dropped.`); return; }
+    if (!emps.length) {
+      warnings.push(`${label} had no employees and was dropped.`);
+      return;
+    }
+
+    // --- Job order validation ---
+    let jobOrder = '';
+    if (typeof e.jobOrder === 'string') {
+      jobOrder = e.jobOrder.trim();
+      if (jobOrder.length > 200) {
+        warnings.push(`${label} had a job order longer than 200 characters (truncated).`);
+        jobOrder = jobOrder.substring(0, 200);
+      }
+    }
+
+    // --- Confidence validation ---
+    const confidence = ['high', 'medium', 'low'].includes(e.confidence)
+      ? e.confidence
+      : 'medium';
+
+    // --- Note validation ---
+    const note = (typeof e.note === 'string') ? e.note.trim().substring(0, 500) : '';
 
     validEntries.push({
       date: e.date,
       employees: emps,
       startTime: padTime(e.startTime),
       endTime: padTime(e.endTime),
-      jobOrder: (typeof e.jobOrder === 'string') ? e.jobOrder.trim() : '',
-      confidence: ['high', 'medium', 'low'].includes(e.confidence) ? e.confidence : 'medium',
-      note: (typeof e.note === 'string') ? e.note.trim() : ''
+      jobOrder: jobOrder,
+      confidence: confidence,
+      note: note
     });
   });
 

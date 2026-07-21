@@ -61,7 +61,12 @@ var API_ACTIONS = {
 
   // ---- Phase 5: Notifications ----
   getNotifications: function (p) { return getNotifications(p.userEmail, p.includeRead); },
-  markNotificationsAsRead: function (p) { return markNotificationsAsRead(p.notificationIds); }
+  markNotificationsAsRead: function (p) { return markNotificationsAsRead(p.notificationIds); },
+
+  // ---- Phase 6: AI features ----
+  smartCheckEntries: function (p) { return smartCheckEntries(p); },
+  getDashboardNarrative: function (p) { return getDashboardNarrative(p); },
+  askTimesheetQuery: function (p) { return askTimesheetQuery(p); }
 };
 
 function doPost(e) {

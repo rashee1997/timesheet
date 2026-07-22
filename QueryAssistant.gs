@@ -57,6 +57,19 @@ function extractQueryIntent(messages, context) {
   var tz = Session.getScriptTimeZone();
   var today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
   var weekday = Utilities.formatDate(new Date(), tz, 'EEEE');
+  
+  // Calculate date ranges for examples
+  var yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  var yesterdayStr = Utilities.formatDate(yesterday, tz, 'yyyy-MM-dd');
+  
+  var lastWeekStart = new Date();
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  var lastWeekStartStr = Utilities.formatDate(lastWeekStart, tz, 'yyyy-MM-dd');
+  var lastWeekEndStr = yesterdayStr;
+  
+  var thisMonthStart = new Date(today.substring(0, 4), parseInt(today.substring(5, 7)) - 1, 1);
+  var thisMonthStartStr = Utilities.formatDate(thisMonthStart, tz, 'yyyy-MM-dd');
 
   // Build context information for the prompt
   var contextInfo = '';
@@ -92,11 +105,14 @@ function extractQueryIntent(messages, context) {
   var systemPrompt = [
     'You extract structured query intent from timesheet questions. Return ONLY valid JSON.',
     '',
-    'Today is ' + today + ' (' + weekday + ').',
+    'Today is ' + today + ' (' + weekday + '). Yesterday was ' + yesterdayStr + '.',
     contextInfo ? contextInfo : '',
     'If the user query is vague (e.g., "show me entries", "what about today"), use the current view context as the default filters.',
     'Available actions: list_entries | get_report',
-    'Date format: yyyy-MM-dd. Interpret relative dates ("last week", "this month") relative to today.',
+    'Date format: yyyy-MM-dd. ALWAYS interpret relative dates ("yesterday", "today", "last week", "this month", "last month") relative to today and convert them to yyyy-MM-dd format.',
+    'For single-day queries ("yesterday", "today", or specific dates like "July 21"), set startDate AND endDate to the same date.',
+    'For date ranges ("last week", "this month", "between X and Y"), set appropriate startDate and endDate.',
+    'For employee names, extract them exactly as written in the query.',
     '',
     'Return: {',
     '  "action": "list_entries|get_report",',
@@ -111,10 +127,15 @@ function extractQueryIntent(messages, context) {
     '}',
     '',
     'Examples:',
-    '- "Show me Rasheedh entries from last week" -> { action:"list_entries", startDate:"2026-07-13", endDate:"2026-07-19", employees:["Rasheedh"] }',
-    '- "Who worked over 10 hours yesterday?" -> { action:"list_entries", minHours:10 }',
-    '- "How much OT this month?" -> { action:"get_report" } with month range',
-    '- "What about Ravi?" -> inherit context from prior assistant messages, keep same dates, change employee to ["Ravi"]',
+    '- "Show me John entries from last week" -> { action:\"list_entries\", startDate:\"' + lastWeekStartStr + '\", endDate:\"' + lastWeekEndStr + '\", employees:[\"John\"] }',
+    '- "Who worked over 10 hours yesterday?" -> { action:\"list_entries\", startDate:\"' + yesterdayStr + '\", endDate:\"' + yesterdayStr + '\", minHours:10 }',
+    '- "How much OT this month?" -> { action:\"get_report\", startDate:\"' + thisMonthStartStr + '\", endDate:\"' + today + '\" }',
+    '- "What did [employee name] work yesterday?" -> { action:\"list_entries\", startDate:\"' + yesterdayStr + '\", endDate:\"' + yesterdayStr + '\", employees:[\"[employee name]\"] }',
+    '- "Show me entries for today" -> { action:\"list_entries\", startDate:\"' + today + '\", endDate:\"' + today + '\" }',
+    '- "Show me entries for July 21" -> { action:\"list_entries\", startDate:\"2026-07-21\", endDate:\"2026-07-21\" }',
+    '- "Show me entries between July 15 and July 20" -> { action:\"list_entries\", startDate:\"2026-07-15\", endDate:\"2026-07-20\" }',
+    '- "Who worked on the weekend?" -> { action:\"list_entries\", startDate:\"' + lastWeekStartStr + '\", endDate:\"' + yesterdayStr + '\" }',
+    '- "What about Name2?" -> inherit context from prior assistant messages, keep same dates, change employee to ["Name2"]',
     '- "Show me entries" (with current context) -> use current date range and filters'
   ].join('\n');
 

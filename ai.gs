@@ -77,14 +77,14 @@ CONTEXT:
 - Match names to {employeeNames} CASE-INSENSITIVELY.
   - If no match within 2 edits (Levenshtein), use the original name and set confidence="low".
 - Handle lists:
-  - "Rasheedh, Ravi" -> ["Rasheedh", "Ravi"]
-  - "Rasheedh & Ravi" -> ["Rasheedh", "Ravi"]
-  - "Rasheedh + Ravi" -> ["Rasheedh", "Ravi"]
+  - "Name1, Name2" -> ["Name1", "Name2"]
+  - "Name1 & Name2" -> ["Name1", "Name2"]
+  - "Name1 + Name2" -> ["Name1", "Name2"]
 - If no employees found, SKIP the entry and warn.
 
 ### JOB ORDERS:
 - Extract from:
-  - Inline: "Rasheedh 8am-4pm JO-123" -> jobOrder: "JO-123"
+  - Inline: "Name1 8am-4pm JO-123" -> jobOrder: "JO-123"
   - Header line: "Job: JO-123" -> Apply "JO-123" to all subsequent entries until another header.
   - Trailing: "JO-123" on a line after employees -> Apply retroactively to previous entries.
 - Multi-word job orders: Preserve full text (e.g., "Project Alpha - Phase 1").
@@ -92,7 +92,7 @@ CONTEXT:
 
 ### GROUPING:
 - MANDATORY: if two or more people share the SAME date, startTime, endTime, AND jobOrder (including "no job order" for all of them), they MUST appear together in ONE entry's "employees" array — this rule applies REGARDLESS of whether the input used a numbered list, a bullet list, or separate lines. List formatting only signals "these are distinct people/shifts to parse," not "these must stay in separate output entries."
-- Numbered lists (e.g., "1. Rasheedh 8am-4pm") and bullet lists (e.g., "- Rasheedh 8am-4pm") each describe one person's shift to extract — but if two such lines end up with identical date/startTime/endTime/jobOrder, merge them into one entry with both names in "employees". Never emit two entries for an identical date/start/end/job combination.
+- Numbered lists (e.g., "1. Name1 8am-4pm") and bullet lists (e.g., "- Name1 8am-4pm") each describe one person's shift to extract — but if two such lines end up with identical date/startTime/endTime/jobOrder, merge them into one entry with both names in "employees". Never emit two entries for an identical date/start/end/job combination.
 
 ### CONFIDENCE & NOTES:
 - confidence:

@@ -12,7 +12,7 @@
  */
 
 /**
- * @param {Object} payload  { messages: [{ role: "user"|"assistant", content }] }
+ * @param {Object} payload  { messages: [{ role: "user"|"assistant", content }], context?: { currentDateRange, currentFilters } }
  * @returns {Object} { success, role: "assistant", content, entries?, report? }
  */
 function askTimesheetQuery(payload) {
@@ -26,8 +26,8 @@ function askTimesheetQuery(payload) {
       return { success: false, error: 'No messages provided.' };
     }
 
-    // Step 1 — extract structured intent from the conversation
-    var intent = extractQueryIntent(messages);
+    // Step 1 — extract structured intent from the conversation, with optional context
+    var intent = extractQueryIntent(messages, payload.context);
     if (intent.error) return { success: false, error: intent.error };
 
     // Step 2 — fetch data from sheets
@@ -53,15 +53,48 @@ function askTimesheetQuery(payload) {
 // Step 1 — Intent extraction
 // ---------------------------------------------------------------------------
 
-function extractQueryIntent(messages) {
+function extractQueryIntent(messages, context) {
   var tz = Session.getScriptTimeZone();
   var today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
   var weekday = Utilities.formatDate(new Date(), tz, 'EEEE');
+
+  // Build context information for the prompt
+  var contextInfo = '';
+  if (context && context.currentDateRange) {
+    contextInfo += 'Current view context: Date range is ' + context.currentDateRange + '. ';
+  }
+  if (context && context.currentFilters) {
+    var filters = context.currentFilters;
+    var filterParts = [];
+    if (filters.employees && filters.employees.length > 0) {
+      filterParts.push('Employees: ' + filters.employees.join(', '));
+    }
+    if (filters.jobOrder) {
+      filterParts.push('Job Order: ' + filters.jobOrder);
+    }
+    if (filters.otOnly) {
+      filterParts.push('OT Only: true');
+    }
+    if (filters.minHours) {
+      filterParts.push('Min Hours: ' + filters.minHours);
+    }
+    if (filters.maxHours) {
+      filterParts.push('Max Hours: ' + filters.maxHours);
+    }
+    if (filters.search) {
+      filterParts.push('Search: ' + filters.search);
+    }
+    if (filterParts.length > 0) {
+      contextInfo += 'Current filters: ' + filterParts.join('; ') + '. ';
+    }
+  }
 
   var systemPrompt = [
     'You extract structured query intent from timesheet questions. Return ONLY valid JSON.',
     '',
     'Today is ' + today + ' (' + weekday + ').',
+    contextInfo ? contextInfo : '',
+    'If the user query is vague (e.g., "show me entries", "what about today"), use the current view context as the default filters.',
     'Available actions: list_entries | get_report',
     'Date format: yyyy-MM-dd. Interpret relative dates ("last week", "this month") relative to today.',
     '',
@@ -81,7 +114,8 @@ function extractQueryIntent(messages) {
     '- "Show me Rasheedh entries from last week" -> { action:"list_entries", startDate:"2026-07-13", endDate:"2026-07-19", employees:["Rasheedh"] }',
     '- "Who worked over 10 hours yesterday?" -> { action:"list_entries", minHours:10 }',
     '- "How much OT this month?" -> { action:"get_report" } with month range',
-    '- "What about Ravi?" -> inherit context from prior assistant messages, keep same dates, change employee to ["Ravi"]'
+    '- "What about Ravi?" -> inherit context from prior assistant messages, keep same dates, change employee to ["Ravi"]',
+    '- "Show me entries" (with current context) -> use current date range and filters'
   ].join('\n');
 
   var extractMessages = [{ role: 'system', content: systemPrompt }].concat(
@@ -101,6 +135,38 @@ function extractQueryIntent(messages) {
   }
   if (!intent.endDate) {
     intent.endDate = today;
+  }
+
+  // If context has date range and intent doesn't specify, use context
+  if (context && context.currentDateRange && !intent.startDate && !intent.endDate) {
+    var dateParts = context.currentDateRange.split(' to ');
+    if (dateParts.length === 2) {
+      intent.startDate = dateParts[0];
+      intent.endDate = dateParts[1];
+    }
+  }
+
+  // If context has filters and intent doesn't override them, use context
+  if (context && context.currentFilters) {
+    var ctxFilters = context.currentFilters;
+    if (!intent.employees && ctxFilters.employees) {
+      intent.employees = ctxFilters.employees;
+    }
+    if (!intent.jobOrder && ctxFilters.jobOrder) {
+      intent.jobOrder = ctxFilters.jobOrder;
+    }
+    if (intent.minHours === undefined && ctxFilters.minHours !== undefined) {
+      intent.minHours = ctxFilters.minHours;
+    }
+    if (intent.maxHours === undefined && ctxFilters.maxHours !== undefined) {
+      intent.maxHours = ctxFilters.maxHours;
+    }
+    if (!intent.search && ctxFilters.search) {
+      intent.search = ctxFilters.search;
+    }
+    if (intent.otOnly === undefined && ctxFilters.otOnly !== undefined) {
+      intent.otOnly = ctxFilters.otOnly;
+    }
   }
 
   return intent;

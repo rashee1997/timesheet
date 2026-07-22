@@ -7,6 +7,15 @@
 const NOTIFICATIONS_SHEET_NAME = "Notifications";
 
 /**
+ * Neutralizes leading =, +, -, @ so free-text saved into a cell can never be
+ * interpreted as a formula (formula/DDE injection protection).
+ */
+function sanitizeSheetText(v) {
+  const s = String(v == null ? '' : v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+/**
  * Ensures the 'Notifications' sheet exists with the correct headers.
  * @returns {GoogleAppsScript.Spreadsheet.Sheet} The Notification sheet.
  */
@@ -34,7 +43,8 @@ function createNotification(recipientEmail, message, type, link = "") {
   const sheet = getOrCreateNotificationsSheet();
   const id = Utilities.getUuid(); // Generate a unique ID for the notification
   const timestamp = new Date().toISOString();
-  const newRow = [id, recipientEmail, message, type, link, timestamp, false]; // 'false' for unread
+  // Sanitize all user-provided text that goes into sheet cells
+  const newRow = [id, recipientEmail, sanitizeSheetText(message), sanitizeSheetText(type), sanitizeSheetText(link), timestamp, false]; // 'false' for unread
 
   sheet.appendRow(newRow);
 

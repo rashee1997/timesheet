@@ -72,20 +72,31 @@ var API_ACTIONS = {
 function doPost(e) {
   var result;
   try {
+    // Parse request first
     if (!e || !e.postData || !e.postData.contents) {
-      throw new Error('Missing request body.');
+      // Use generic error to avoid leaking info before auth
+      result = { success: false, error: 'Not authorized.' };
+      return jsonOutput_(result);
     }
-    var body = JSON.parse(e.postData.contents);
+    var body;
+    try {
+      body = JSON.parse(e.postData.contents);
+    } catch (parseErr) {
+      result = { success: false, error: 'Not authorized.' };
+      return jsonOutput_(result);
+    }
 
+    // Auth check MUST happen before any other processing
     var expectedSecret = PropertiesService.getScriptProperties().getProperty(API_SHARED_SECRET_PROPERTY);
     if (!expectedSecret || body.sharedSecret !== expectedSecret) {
       result = { success: false, error: 'Not authorized.' };
       return jsonOutput_(result);
     }
 
+    // Validate action exists
     var handler = API_ACTIONS[body.action];
     if (!handler) {
-      result = { success: false, error: 'Unknown action: ' + body.action };
+      result = { success: false, error: 'Invalid action.' };
       return jsonOutput_(result);
     }
 

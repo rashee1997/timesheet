@@ -91,9 +91,8 @@ CONTEXT:
 - If no job order, use empty string "".
 
 ### GROUPING:
-- Group employees sharing the SAME date, startTime, endTime, AND jobOrder into ONE entry.
-- Numbered lists (e.g., "1. Rasheedh 8am-4pm") imply SEPARATE entries.
-- Bullet lists (e.g., "- Rasheedh 8am-4pm") imply SEPARATE entries.
+- MANDATORY: if two or more people share the SAME date, startTime, endTime, AND jobOrder (including "no job order" for all of them), they MUST appear together in ONE entry's "employees" array — this rule applies REGARDLESS of whether the input used a numbered list, a bullet list, or separate lines. List formatting only signals "these are distinct people/shifts to parse," not "these must stay in separate output entries."
+- Numbered lists (e.g., "1. Rasheedh 8am-4pm") and bullet lists (e.g., "- Rasheedh 8am-4pm") each describe one person's shift to extract — but if two such lines end up with identical date/startTime/endTime/jobOrder, merge them into one entry with both names in "employees". Never emit two entries for an identical date/start/end/job combination.
 
 ### CONFIDENCE & NOTES:
 - confidence:
@@ -129,7 +128,6 @@ Return ONLY this JSON format:
 
 // ---------------------------------------------------------------------
 // CREDENTIAL STORAGE FUNCTIONS
-// ---------------------------------------------------------------------
 // ---------------------------------------------------------------------
 
 function setupCloudflareCredentials() {
@@ -321,10 +319,6 @@ function levenshteinDistance(a, b) {
   return matrix[b.length][a.length];
 }
 
-// ---------------------------------------------------------------------
-// CONTEXT & VALIDATION HELPERS
-// ---------------------------------------------------------------------
-
 /**
  * Returns dynamic context for the sheet (employees, job orders, dates).
  * This data is injected into the LLM prompt at runtime.
@@ -441,7 +435,7 @@ function validateAndCleanEntries(data, initialWarnings, sheetName) {
     const validatedEmps = [];
     for (const emp of emps) {
       const lowerEmp = emp.toLowerCase();
-      
+
       // Check for exact match (case-insensitive)
       const exactMatchIndex = validEmployeeNamesLower.indexOf(lowerEmp);
       if (exactMatchIndex !== -1) {
@@ -516,7 +510,60 @@ function validateAndCleanEntries(data, initialWarnings, sheetName) {
     warnings.push(`Only the first ${AI_PARSE_MAX_ENTRIES} entries were kept.`);
   }
 
-  return { validEntries, warnings };
+  return { validEntries: mergeEntriesSharingShift_(validEntries), warnings };
+}
+
+/**
+ * Deterministic safety net for grouping — does NOT rely on the model
+ * obeying the "group same date/time/job into one entry" prompt rule.
+ * The prompt asks for grouping already (see the GROUPING section of
+ * QUICKFILL_PROMPT_TEMPLATE), but prompt compliance from an LLM is never
+ * guaranteed — this is especially true when the input is a numbered or
+ * bulleted list, since the model can end up treating "one line per person"
+ * as "one output entry per person" even when their date/time/job all
+ * match. This runs AFTER employee validation/fuzzy-matching, so it merges
+ * on the final, already-resolved employee names — entries sharing the same
+ * date + startTime + endTime + jobOrder (job order compared
+ * case-insensitively; "" and "no job" bucket together) are combined into
+ * one entry with a deduplicated "employees" array regardless of how the
+ * model split them. Confidence is downgraded to the lowest of the merged
+ * set, and per-entry notes are combined so nothing silently disappears.
+ */
+function mergeEntriesSharingShift_(entries) {
+  const CONFIDENCE_RANK = { high: 2, medium: 1, low: 0 };
+  const byKey = {};
+  const order = [];
+
+  entries.forEach(e => {
+    const jobKey = (e.jobOrder || '').trim().toLowerCase();
+    const key = e.date + '|' + e.startTime + '|' + e.endTime + '|' + jobKey;
+
+    if (!byKey[key]) {
+      byKey[key] = {
+        date: e.date,
+        employees: [],
+        startTime: e.startTime,
+        endTime: e.endTime,
+        jobOrder: e.jobOrder,
+        confidence: e.confidence,
+        note: e.note
+      };
+      order.push(key);
+    }
+
+    const bucket = byKey[key];
+    e.employees.forEach(name => {
+      if (!bucket.employees.includes(name)) bucket.employees.push(name);
+    });
+    if (CONFIDENCE_RANK[e.confidence] < CONFIDENCE_RANK[bucket.confidence]) {
+      bucket.confidence = e.confidence;
+    }
+    if (e.note && e.note !== bucket.note) {
+      bucket.note = bucket.note ? bucket.note + ' | ' + e.note : e.note;
+    }
+  });
+
+  return order.map(key => byKey[key]);
 }
 
 
@@ -529,11 +576,11 @@ function parseNaturalLanguageEntries(text, sheetName) {
     if (!text || String(text).trim() === '') {
       return { success: false, error: 'Paste some shift notes first.' };
     }
-    
+
     // Get dynamic context for the sheet
     const context = getSheetContextCached(sheetName);
     const input = String(text).trim().slice(0, AI_PARSE_MAX_INPUT_CHARS);
-    
+
     // Replace placeholders in the template with dynamic context
     const prompt = QUICKFILL_PROMPT_TEMPLATE
       .replace(/{today}/g, context.todayStr)
@@ -618,7 +665,7 @@ function parseNaturalLanguageEntriesWithImage(text, imageBase64, mimeType, sheet
     // Get dynamic context for the sheet
     const context = getSheetContextCached(sheetName);
     const userText = String(text || '').trim().slice(0, AI_PARSE_MAX_INPUT_CHARS);
-    
+
     // Replace placeholders in the template with dynamic context
     const userMsg = QUICKFILL_PROMPT_TEMPLATE
       .replace(/{today}/g, context.todayStr)

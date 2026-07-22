@@ -299,20 +299,6 @@
 
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    function showStatus(type, message) {
-      statusBox.className = 'status-box ' + type;
-      statusBox.innerHTML = message;
-      if (type === 'success') autoDismissSuccess(statusBox);
-    }
-    function clearStatus() {
-      statusBox.className = 'status-box';
-      statusBox.innerHTML = '';
-      if (statusBox._autoDismissTimer) clearTimeout(statusBox._autoDismissTimer);
-    }
-    function escapeHtml(s) {
-      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
     // --- Initial load: date range + employee list, both defensive ---
     google.script.run
       .withSuccessHandler(function (range) {
@@ -320,7 +306,7 @@
         endDateInput.value = range.end;
       })
       .withFailureHandler(function (err) {
-        showStatus('error', 'Could not load default date range: ' + (err.message || err) + '. Please pick dates manually.');
+        showStatus('error', 'Could not load the default date range — ' + friendlyError(err) + ' Please pick dates manually.');
       })
       .getDefaultReportRange();
 
@@ -556,7 +542,7 @@
           previewBtn.textContent = 'Preview Report';
           if (!result.success) {
             previewArea.innerHTML = '';
-            showStatus('error', escapeHtml(result.error));
+            showStatus('error', friendlyError(result.error));
             return;
           }
           renderPreview(result.report);
@@ -565,7 +551,7 @@
           previewBtn.disabled = false;
           previewBtn.textContent = 'Preview Report';
           previewArea.innerHTML = '';
-          showStatus('error', escapeHtml(err.message || String(err)));
+          showStatus('error', friendlyError(err));
         })
         .previewOtReport(startDateInput.value, endDateInput.value, selectedEmployees);
     });
@@ -655,19 +641,14 @@
             });
             return;
           }
-          showStatus('error', escapeHtml(result.error || 'Something went wrong.'));
+          showStatus('error', friendlyError(result.error || 'Something went wrong.'));
         })
         .withFailureHandler(function (err) {
           setSending(false);
           hideProgressModal();
-          showStatus('error', escapeHtml(err.message || String(err)));
+          showStatus('error', friendlyError(err));
         })
         .sendOtReport(buildPayload(confirmFlags));
-    }
-
-    function clearFieldErrors() {
-      document.querySelectorAll('.field-error-inline').forEach(el => el.remove());
-      document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
     }
 
     function clearForm() {
@@ -723,17 +704,6 @@
       el.classList.remove('input-error');
       var sibling = el.parentNode.querySelector('.field-error-inline');
       if (sibling) sibling.remove();
-    }
-
-    function markError(el, msg) {
-      el.classList.add('input-error');
-      var existing = el.parentNode.querySelector('.field-error-inline');
-      if (existing) existing.remove();
-      var err = document.createElement('div');
-      err.className = 'field-error-inline';
-      err.style.cssText = 'font-size: 11px; color: var(--error); margin-top: 4px;';
-      err.textContent = msg;
-      el.parentNode.appendChild(err);
     }
 
     // --- Recipient Group Presets ---

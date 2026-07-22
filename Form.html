@@ -1178,15 +1178,6 @@
       return query; // Fallback to raw extracted job
     }
 
-    function escapeHtml(unsafe) {
-      if (!unsafe) return '';
-      return String(unsafe)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
 
     // --- Collapsible AI Import Functions ---
 
@@ -1308,7 +1299,7 @@
           progressTimers.forEach(function (t) { clearTimeout(t); });
           if (!aiCancelled) {
             setAiLoading(false);
-            showAiStatus('error', err.message || String(err));
+            showAiStatus('error', friendlyError(err));
           }
         });
 
@@ -1332,22 +1323,12 @@
       if (el) el.textContent = text;
     }
 
-    function showAiStatus(type, message) {
-      aiStatusBox.className = 'status-box ' + type;
-      aiStatusBox.innerHTML = message;
-    }
-
-    function clearAiStatus() {
-      aiStatusBox.className = 'status-box';
-      aiStatusBox.innerHTML = '';
-    }
-
     function handleAiParseResult(result) {
       setAiLoading(false);
       clearAiStatus();
       
       if (!result.success) {
-        showAiStatus('error', escapeHtml(result.error));
+        showAiStatus('error', friendlyError(result.error));
         return;
       }
       
@@ -1487,17 +1468,6 @@
 
     // --- Status Boxes and Controls ---
 
-    function showStatus(type, message) {
-      statusBox.className = 'status-box ' + type;
-      statusBox.innerHTML = message;
-      if (type === 'success') autoDismissSuccess(statusBox);
-    }
-    
-    function clearStatus() {
-      statusBox.className = 'status-box';
-      statusBox.innerHTML = '';
-    }
-
     // --- Employee & Job Loading Procedures ---
 
     function loadEmployees() {
@@ -1507,7 +1477,7 @@
         .withSuccessHandler(renderEmployees)
         .withFailureHandler(function (err) {
           container.innerHTML = '<div style="font-size:12px; color:var(--muted)">Could not load employees.</div>';
-          showStatus('error', err.message || String(err));
+          handleBackendError(err);
         })
         .getEmployeesForSheet(ACTIVE_SHEET_NAME);
     }
@@ -1561,20 +1531,6 @@
     }
 
     // --- Validation and Submission Engine ---
-
-    function clearFieldErrors() {
-      document.querySelectorAll('.field-error-inline').forEach(el => el.remove());
-      document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
-    }
-
-    function markError(el, msg) {
-      el.classList.add('input-error');
-      const err = document.createElement('div');
-      err.className = 'field-error-inline';
-      err.style.cssText = 'font-size: 11px; color: var(--error); margin-top: 4px;';
-      err.textContent = msg;
-      el.parentNode.appendChild(err);
-    }
 
     function validateClientSide() {
       clearFieldErrors();
@@ -1724,7 +1680,7 @@
           .withSuccessHandler(handleResult)
           .withFailureHandler(function (err) {
             setLoading(false);
-            showStatus('error', err.message || String(err));
+            handleBackendError(err);
           })
           .submitTimeEntry(payload);
       } else {
@@ -1732,7 +1688,7 @@
           .withSuccessHandler(handleResult)
           .withFailureHandler(function (err) {
             setLoading(false);
-            showStatus('error', err.message || String(err));
+            handleBackendError(err);
           })
           .submitBulkTimeEntries(payload);
       }
@@ -1787,7 +1743,7 @@
         return;
       }
 
-      showStatus('error', escapeHtml(result.error) || 'An unexpected error occurred saving time rows.');
+      showStatus('error', friendlyError(result.error) || 'An unexpected error occurred saving time rows.');
     }
 
     submitBtn.addEventListener('click', function () {
@@ -1805,7 +1761,6 @@
     clearBtn.addEventListener('click', function () {
       clearFieldErrors();
       clearStatus();
-      if (statusBox._autoDismissTimer) clearTimeout(statusBox._autoDismissTimer);
 
       var todayStr = new Date().toISOString().slice(0, 10);
       dateInput.value = todayStr;
@@ -1838,12 +1793,12 @@
           if (result.success) {
             showStatus('success', result.message);
           } else {
-            showStatus('error', result.error);
+            showStatus('error', friendlyError(result.error));
           }
         })
         .withFailureHandler(function (err) {
           undoBtn.disabled = false;
-          showStatus('error', err.message || String(err));
+          handleBackendError(err);
         })
         .undoLastSave();
     });

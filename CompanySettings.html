@@ -66,14 +66,14 @@ document.getElementById('companySettingsForm').addEventListener('submit', functi
           if (result.success) {
             document.getElementById('companySettingsOverlay').style.display = 'none';
             showStatus('success', result.message);
-          } else {
-            showStatus('error', result.error);
-          }
-        })
+        } else {
+          showStatus('error', friendlyError(result.error));
+        }
+      })
         .withFailureHandler(function (err) {
           btn.disabled = false;
           btn.textContent = 'Save';
-          showStatus('error', err.message || String(err));
+          showStatus('error', friendlyError(err));
         })
         .saveCompanyInfo(formData);
     };
@@ -91,14 +91,14 @@ document.getElementById('companySettingsForm').addEventListener('submit', functi
           document.getElementById('companySettingsOverlay').style.display = 'none';
           showStatus('success', result.message);
         } else {
-          showStatus('error', result.error);
+          showStatus('error', friendlyError(result.error));
         }
       })
-      .withFailureHandler(function (err) {
-        btn.disabled = false;
-        btn.textContent = 'Save';
-        showStatus('error', err.message || String(err));
-      })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          btn.textContent = 'Save';
+          showStatus('error', friendlyError(err));
+        })
       .saveCompanyInfo(formData);
   }
 });

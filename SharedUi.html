@@ -1,3 +1,217 @@
+/* ===================================================
+ * Shared UI Utilities — Centralized Error Handling
+ * ===================================================
+ * All HTML frontends include this file. Keep helpers
+ * here so every dialog gets consistent error UX.
+ * =================================================== */
+
+// --- Generic user-friendly error messages ---
+var USER_FRIENDLY_ERRORS = {
+  timeout:       'The request took too long to complete. Please try again.',
+  network:       'A network error occurred. Check your connection and try again.',
+  permissions:   'You don\'t have permission to perform this action. Contact your admin.',
+  validation:    'Some fields are invalid. Please review and correct them.',
+  server:        'The server encountered an error. Please try again in a moment.',
+  unknown:       'Something unexpected happened. Please try again.',
+  rate_limit:    'Too many requests. Please wait a moment and try again.',
+  not_found:     'The requested data was not found. It may have been removed.',
+  conflict:      'A conflict was detected. Refresh and try again.',
+  parsing:       'The data could not be processed. Please check your input.',
+  ai_timeout:    'QuickFill took too long to respond. Please try again or use manual entry.',
+  ai_no_result:  'QuickFill could not extract any shift data from the provided text. Try rephrasing or adding more details.',
+  ai_partial:    'QuickFill could only partially parse the input. Review highlighted fields and fill in missing info.',
+  missing_field: 'Please fill in all required fields before saving.',
+  no_employees:  'No employees are configured for this sheet. Add employees first.',
+  no_job_order:  'No job order specified. Please enter or select a job order.'
+};
+
+// --- Common error patterns we can detect ---
+var ERROR_PATTERNS = [
+  // Timeout-related
+  { pattern: /timeout/i,            key: 'timeout' },
+  { pattern: /timed.?out/i,         key: 'timeout' },
+  { pattern: /exceeded.*time/i,     key: 'timeout' },
+  { pattern: /deadline/i,           key: 'timeout' },
+  { pattern: /rate.?limit/i,        key: 'rate_limit' },
+  // Network / connectivity
+  { pattern: /network/i,            key: 'network' },
+  { pattern: /connection/i,         key: 'network' },
+  { pattern: /fetch/i,              key: 'network' },
+  { pattern: /econnrefused/i,       key: 'network' },
+  { pattern: /econnreset/i,         key: 'network' },
+  { pattern: /etimedout/i,          key: 'network' },
+  // Permissions
+  { pattern: /permission/i,         key: 'permissions' },
+  { pattern: /forbidden/i,          key: 'permissions' },
+  { pattern: /not authorized/i,     key: 'permissions' },
+  { pattern: /access.*denied/i,     key: 'permissions' },
+  { pattern: /cannot.*read/i,       key: 'permissions' },
+  { pattern: /no.*right/i,          key: 'permissions' },
+  // Validation / bad input
+  { pattern: /invalid/i,            key: 'validation' },
+  { pattern: /required/i,           key: 'missing_field' },
+  { pattern: /must provide/i,       key: 'missing_field' },
+  // Not found
+  { pattern: /not found/i,          key: 'not_found' },
+  { pattern: /doesn.*exist/i,       key: 'not_found' },
+  // Conflict
+  { pattern: /already exists/i,     key: 'conflict' },
+  { pattern: /duplicate/i,          key: 'conflict' },
+  // Server-side
+  { pattern: /exception/i,          key: 'server' },
+  { pattern: /internal error/i,     key: 'server' },
+  { pattern: /unexpected error/i,   key: 'server' },
+  { pattern: /apps script/i,        key: 'server' },
+  { pattern: /cannot call/i,        key: 'server' }
+];
+
+/**
+ * Translate a raw error into a user-friendly message.
+ * If the error already looks hand-crafted (starts with a
+ * friendly phrase like 'Please', 'You', 'Each', 'Fix'),
+ * pass it through as-is.
+ *
+ * @param {Error|string} err  The error object or message string.
+ * @returns {string}           A user-friendly error message.
+ */
+function friendlyError(err) {
+  var msg = (err && err.message) ? err.message : (err ? String(err) : '');
+  if (!msg) return USER_FRIENDLY_ERRORS.unknown;
+
+  // If it already looks user-friendly, keep it
+  if (/^(Please|You|Each|Fix|Select|Pick|Enter|Add|Remove|Cannot|The|Date|Start|End)/.test(msg)) {
+    return msg;
+  }
+
+  // Try to match against known patterns
+  for (var i = 0; i < ERROR_PATTERNS.length; i++) {
+    if (ERROR_PATTERNS[i].pattern.test(msg)) {
+      return USER_FRIENDLY_ERRORS[ERROR_PATTERNS[i].key];
+    }
+  }
+
+  // Fallback: show the raw message but truncated
+  return msg.length > 120 ? msg.slice(0, 120) + '…' : msg;
+}
+
+/**
+ * Default handler for google.script.run.withFailureHandler.
+ * Shows a user-friendly error in the status box.
+ *
+ * Usage:
+ *   google.script.run
+ *     .withFailureHandler(handleBackendError)
+ *     .someFunction();
+ *
+ * If you need a custom callback, wrap:
+ *   .withFailureHandler(function (err) {
+ *     handleBackendError(err);
+ *     myCustomCleanup();
+ *   })
+ */
+function handleBackendError(err) {
+  var box = getActiveStatusBox();
+  if (box) {
+    showStatus('error', friendlyError(err));
+  }
+}
+
+/**
+ * Find the nearest visible status box on the page.
+ */
+function getActiveStatusBox() {
+  var box = document.getElementById('statusBox');
+  if (box) return box;
+  box = document.getElementById('aiStatusBox');
+  if (box) return box;
+  return null;
+}
+
+/**
+ * Show a status message in a status-box element.
+ * @param {string} type    'error' | 'warn' | 'success'
+ * @param {string} message HTML-safe message content
+ */
+function showStatus(type, message) {
+  var box = document.getElementById('statusBox');
+  if (box) {
+    box.className = 'status-box ' + type;
+    box.innerHTML = message;
+    if (type === 'success') autoDismissSuccess(box);
+  }
+}
+
+/**
+ * Show a status message in the AI status box specifically.
+ */
+function showAiStatus(type, message) {
+  var box = document.getElementById('aiStatusBox');
+  if (box) {
+    box.className = 'status-box ' + type;
+    box.innerHTML = message;
+  }
+}
+
+/**
+ * Clear the main status box and any auto-dismiss timer.
+ */
+function clearStatus() {
+  var box = document.getElementById('statusBox');
+  if (box) {
+    if (box._autoDismissTimer) clearTimeout(box._autoDismissTimer);
+    box.className = 'status-box';
+    box.innerHTML = '';
+  }
+}
+
+/**
+ * Clear all inline field error markers.
+ */
+function clearFieldErrors() {
+  var els = document.querySelectorAll('.field-error-inline');
+  for (var i = 0; i < els.length; i++) els[i].remove();
+  var errs = document.querySelectorAll('.input-error');
+  for (var j = 0; j < errs.length; j++) errs[j].classList.remove('input-error');
+}
+
+/**
+ * Mark a single input element with an inline error.
+ */
+function markError(el, msg) {
+  el.classList.add('input-error');
+  var err = document.createElement('div');
+  err.className = 'field-error-inline';
+  err.style.cssText = 'font-size: 11px; color: var(--error); margin-top: 4px;';
+  err.textContent = msg;
+  el.parentNode.appendChild(err);
+}
+
+/**
+ * Escape HTML entities to prevent XSS when injecting user text.
+ */
+function escapeHtml(unsafe) {
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Set a submit button to loading state.
+ */
+function setLoading(btn, isLoading, label) {
+  btn.disabled = isLoading;
+  btn.innerHTML = isLoading
+    ? '<span class="spinner"></span>' + (label || 'Saving…')
+    : btn.getAttribute('data-restore-label') || btn.textContent;
+}
+
+/**
+ * Auto-dismiss a success status box after a delay.
+ */
 function autoDismissSuccess(boxEl, delay) {
   delay = delay || 4000;
   var timer = boxEl._autoDismissTimer;
@@ -10,6 +224,9 @@ function autoDismissSuccess(boxEl, delay) {
   }, delay);
 }
 
+/**
+ * Standard debounce utility.
+ */
 function debounce(fn, ms) {
   var timer = null;
   return function () {

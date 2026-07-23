@@ -28,6 +28,10 @@ var API_ACTIONS = {
     return submitBulkTimeEntries(Object.assign({}, p.formData, { actorEmail: actorEmail }));
   },
   undoLastSave: function (p, actorEmail) { return undoLastSave(actorEmail); },
+  getEntryForEdit: function (p) { return getEntryForEdit(p); },
+  updateTimeEntry: function (p, actorEmail) {
+    return updateTimeEntry(Object.assign({}, p.formData, { actorEmail: actorEmail }));
+  },
   getShiftTemplates: function () { return getShiftTemplates(); },
   saveShiftTemplate: function (p) { return saveShiftTemplate(p.name, p.startTime, p.endTime, p.jobOrder); },
   deleteShiftTemplate: function (p) { return deleteShiftTemplate(p.id); },

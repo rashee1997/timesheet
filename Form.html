@@ -543,6 +543,7 @@
 
   <div class="footer">
     <button type="button" class="footer-btn btn-secondary" id="undoBtn" style="flex:0.3;display:none;">↩ Undo</button>
+    <button type="button" class="footer-btn btn-secondary" id="cancelEditBtn" style="flex:0.3;display:none;">Cancel</button>
     <button type="button" class="footer-btn btn-secondary" id="clearBtn" style="flex: 0.3;">Clear</button>
     <button type="button" class="footer-btn btn-primary" id="submitBtn">Save Entry</button>
   </div>
@@ -593,6 +594,10 @@
     let ALL_EMPLOYEES = []; 
     let dateGroupCount = 0;
     let pendingConfirmType = null;
+
+    // --- Edit mode state ---
+    let editMode = false;
+    let editOriginalKey = null; // 'dateIso|empCol' — detects if user changed target mid-edit
 
     let singleSelector = null;
     const singleSelectedCols = new Set();
@@ -1126,6 +1131,10 @@
         getSelection: () => Array.from(selectedColsSet),
         clear: () => {
           selectedColsSet.clear();
+          renderChips();
+        },
+        selectColumn: (col) => {
+          selectedColsSet.add(col);
           renderChips();
         }
       };
@@ -1663,9 +1672,11 @@
 
     function setLoading(isLoading, label) {
       submitBtn.disabled = isLoading;
+      var defaultLabel = editMode ? 'Updating…' : 'Saving…';
+      var btnText = editMode ? 'Update Entry' : 'Save Entry';
       submitBtn.innerHTML = isLoading
-        ? '<span class="spinner"></span>' + (label || 'Saving…')
-        : 'Save Entry';
+        ? '<span class="spinner"></span>' + (label || defaultLabel)
+        : btnText;
     }
 
     let lastSubmitPayload = null;
@@ -1675,7 +1686,27 @@
       const payload = buildPayload(confirmFlags);
       lastSubmitPayload = payload;
 
-      if (currentMode === 'single') {
+      if (editMode) {
+        // Edit mode: call updateTimeEntry with a single employeeColumn
+        var editPayload = {
+          formData: {
+            sheetName: ACTIVE_SHEET_NAME,
+            date: dateInput.value,
+            startTime: startInput.value,
+            endTime: endInput.value,
+            jobOrder: jobOrderInput.value,
+            employeeColumn: getSelectedColumns()[0]
+          }
+        };
+        if (confirmFlags) Object.assign(editPayload.formData, confirmFlags);
+        google.script.run
+          .withSuccessHandler(handleResult)
+          .withFailureHandler(function (err) {
+            setLoading(false);
+            handleBackendError(err);
+          })
+          .updateTimeEntry(editPayload);
+      } else if (currentMode === 'single') {
         google.script.run
           .withSuccessHandler(handleResult)
           .withFailureHandler(function (err) {
@@ -1700,6 +1731,7 @@
       if (result.success) {
         showStatus('success', '✓ ' + escapeHtml(result.message));
         clearFieldErrors();
+        exitEditMode();
 
         const today = new Date().toISOString().slice(0, 10);
         dateInput.value = today;
@@ -1753,6 +1785,26 @@
         showStatus('error', clientError);
         return;
       }
+      // Edit-mode guard: warn if the user changed the target entry mid-edit
+      if (editMode) {
+        var selectedCols = getSelectedColumns();
+        if (selectedCols.length !== 1) {
+          showStatus('error', 'Please select exactly one employee when editing.');
+          return;
+        }
+        var currentKey = dateInput.value + '|' + selectedCols[0];
+        if (currentKey !== editOriginalKey) {
+          showConfirmModal('You changed the date or employee. This will update a <strong>different entry</strong> than the one you started editing. Continue?').then(function (confirmed) {
+            if (confirmed) {
+              // Update the original key so we don't warn again
+              editOriginalKey = currentKey;
+              clearStatus();
+              doSubmit();
+            }
+          });
+          return;
+        }
+      }
       clearStatus();
       doSubmit();
     });
@@ -1761,6 +1813,7 @@
     clearBtn.addEventListener('click', function () {
       clearFieldErrors();
       clearStatus();
+      exitEditMode();
 
       var todayStr = new Date().toISOString().slice(0, 10);
       dateInput.value = todayStr;
@@ -1898,6 +1951,87 @@
     document.getElementById('viewExistingBtn').addEventListener('click', function () {
       showWeeklyView(ACTIVE_SHEET_NAME);
     });
+
+    // --- Edit Mode ---
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    cancelEditBtn.addEventListener('click', function () {
+      exitEditMode();
+      clearStatus();
+      clearFieldErrors();
+      // Reset form to today
+      const today = new Date().toISOString().slice(0, 10);
+      dateInput.value = today;
+      startInput.value = '';
+      endInput.value = '';
+      jobOrderInput.value = '';
+      if (singleSelector) singleSelector.clear();
+      document.getElementById('singlePreviewContainer').innerHTML = '';
+      var badge = document.getElementById('fridayBadge');
+      if (badge) badge.style.display = isFridayDate(today) ? 'inline' : 'none';
+    });
+
+    /**
+     * Enter edit mode: fetches the current entry data for (sheet, date, empCol),
+     * switches to single mode, pre-fills the form, and updates button states.
+     */
+    function enterEditMode(sheetName, dateIso, empCol) {
+      showStatus('info', 'Loading entry for editing…');
+      google.script.run
+        .withSuccessHandler(function (result) {
+          if (!result.success || !result.entry) {
+            showStatus('error', friendlyError(result.error) || 'Could not load entry for editing.');
+            return;
+          }
+          var entry = result.entry;
+
+          // Force single mode
+          currentMode = 'single';
+          singleModeBtn.classList.add('active');
+          bulkModeBtn.classList.remove('active');
+          singleFields.style.display = 'block';
+          bulkFields.style.display = 'none';
+
+          // Pre-fill form fields
+          dateInput.value = entry.date;
+          var badge = document.getElementById('fridayBadge');
+          if (badge) badge.style.display = isFridayDate(entry.date) ? 'inline' : 'none';
+          startInput.value = entry.startTime;
+          endInput.value = entry.endTime;
+          jobOrderInput.value = entry.jobOrder;
+
+          // Select the employee in the selector
+          if (singleSelector) {
+            singleSelector.clear();
+            singleSelector.selectColumn(entry.employeeColumn);
+          }
+
+          // Activate edit mode state
+          editMode = true;
+          editOriginalKey = entry.date + '|' + entry.employeeColumn;
+          submitBtn.innerHTML = 'Update Entry';
+          submitBtn.style.background = '#f59e0b';
+          cancelEditBtn.style.display = '';
+          document.getElementById('undoBtn').style.display = 'none';
+          clearStatus();
+          showStatus('success', 'Editing ' + entry.employeeName + ' — ' + entry.date + '. Make changes and click Update Entry.');
+          updateSinglePreview();
+        })
+        .withFailureHandler(function (err) {
+          showStatus('error', 'Failed to load entry: ' + (err.message || err));
+        })
+        .getEntryForEdit({ sheetName: sheetName, date: dateIso, employeeColumn: empCol });
+    }
+
+    /**
+     * Exit edit mode and restore the form to create state.
+     */
+    function exitEditMode() {
+      editMode = false;
+      editOriginalKey = null;
+      submitBtn.innerHTML = 'Save Entry';
+      submitBtn.style.background = '';
+      cancelEditBtn.style.display = 'none';
+    }
 
     // --- Dark Mode ---
     initDarkMode();

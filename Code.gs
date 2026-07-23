@@ -206,6 +206,125 @@ function processBulkSubmission(formData) {
 }
 
 // ---------------------------------------------------------------------
+// ENTRY EDIT — read current values + update with isEdit flag
+// ---------------------------------------------------------------------
+
+/**
+ * Reads the current values for a single entry identified by
+ * (sheetName, date, employeeColumn) so the UI can pre-fill the edit form.
+ *
+ * @param {Object} payload  { sheetName, date (yyyy-MM-dd), employeeColumn (number) }
+ * @returns {Object} { success, entry: { date, startTime, endTime, jobOrder, employeeName, employeeColumn, exists } | null, error? }
+ */
+function getEntryForEdit(payload) {
+  try {
+    if (!payload || !payload.sheetName) return { success: false, error: 'Missing sheet name.' };
+    if (!payload.date) return { success: false, error: 'Missing date.' };
+    if (!payload.employeeColumn) return { success: false, error: 'Missing employee column.' };
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(payload.sheetName);
+    if (!sheet) return { success: false, error: 'The sheet "' + payload.sheetName + '" no longer exists.' };
+
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow < CONFIG.DATA_START_ROW) return { success: false, error: 'Sheet has no data rows.' };
+
+    // Validate employee column is a real START block
+    var blocks = findEmployeeBlocks(sheet);
+    var block = null;
+    var empCol = parseInt(payload.employeeColumn, 10);
+    for (var b = 0; b < blocks.length; b++) {
+      if (blocks[b].column === empCol) { block = blocks[b]; break; }
+    }
+    if (!block) return { success: false, error: 'Employee column ' + empCol + ' is not valid on this sheet.' };
+
+    // Find the target row by scanning column A for the date
+    var allValues = sheet.getRange(CONFIG.DATA_START_ROW, 1, lastRow - CONFIG.DATA_START_ROW + 1, lastCol).getValues();
+    var tz = Session.getScriptTimeZone();
+    var dateKey;
+    try {
+      dateKey = Utilities.formatDate(parseIsoDate(payload.date), tz, 'yyyy-MM-dd');
+    } catch (e) {
+      return { success: false, error: 'Invalid date format.' };
+    }
+
+    var targetRowIdx = -1;
+    for (var r = 0; r < allValues.length; r++) {
+      var d = parseCellDate(allValues[r][CONFIG.DATE_COL - 1]);
+      if (d && !isNaN(d.getTime()) && Utilities.formatDate(d, tz, 'yyyy-MM-dd') === dateKey) {
+        targetRowIdx = r;
+        break;
+      }
+    }
+    if (targetRowIdx === -1) return { success: false, error: 'Date not found in column A of "' + payload.sheetName + '".' };
+
+    // Read the 6-column block
+    var rowVals = allValues[targetRowIdx];
+    var startVal = rowVals[empCol - 1];
+    var endVal = rowVals[empCol];
+    var jobOrder = rowVals[empCol + 5 - 1] ? String(rowVals[empCol + 5 - 1]).trim() : '';
+
+    var exists = !!(startVal && endVal);
+    var startTime = exists ? formatTimeCell(startVal, tz) : '';
+    var endTime = exists ? formatTimeCell(endVal, tz) : '';
+
+    return {
+      success: true,
+      entry: {
+        date: payload.date,
+        startTime: startTime,
+        endTime: endTime,
+        jobOrder: jobOrder,
+        employeeName: block.name,
+        employeeColumn: empCol,
+        sheetName: payload.sheetName,
+        exists: exists
+      }
+    };
+  } catch (err) {
+    Logger.log('getEntryForEdit failed: ' + err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Updates an existing timesheet entry. Same shape as submitTimeEntry but
+ * passes isEdit: true so coreProcessEntries skips the overwrite warning
+ * and logs the audit action as 'edit' instead of 'write'.
+ *
+ * @param {Object} formData  { sheetName, date, startTime, endTime, jobOrder, employeeColumn }
+ */
+function updateTimeEntry(formData) {
+  try {
+    if (!formData || !formData.sheetName) throw new Error('Missing target sheet - please close and reopen the form.');
+    if (!formData.date) throw new Error('Please select a date.');
+    if (!formData.startTime || !formData.endTime) throw new Error('Please enter both a start time and an end time.');
+    if (!formData.employeeColumn) throw new Error('Please select an employee.');
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(formData.sheetName);
+    if (!sheet) throw new Error('The sheet "' + formData.sheetName + '" no longer exists.');
+
+    var entries = [{
+      date: formData.date,
+      employeeColumn: parseInt(formData.employeeColumn, 10),
+      startTime: formData.startTime,
+      endTime: formData.endTime,
+      jobOrder: formData.jobOrder
+    }];
+
+    return coreProcessEntries(sheet, entries, {
+      confirmWarnings: !!formData.confirmWarnings,
+      actorEmail: formData.actorEmail,
+      isEdit: true
+    });
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------
 // SHARED VALIDATION + WRITE CORE
 // ---------------------------------------------------------------------
 
@@ -342,7 +461,7 @@ function coreProcessEntries(sheet, rawEntries, flags) {
       const v = rowVals[empCol - 1 + c];
       if (v !== '' && v !== null && v !== undefined) { hasExisting = true; break; }
     }
-    if (hasExisting) {
+    if (hasExisting && !flags.isEdit) {
       warnOverwrite.push(warnRow);
     }
 
@@ -412,8 +531,9 @@ function coreProcessEntries(sheet, rawEntries, flags) {
   invalidateTimesheetScanCache_();
 
   saveUndoData(sheet.getName(), undoEntries);
+  var auditAction = flags.isEdit ? 'edit' : 'write';
   validated.forEach(function (entry) {
-    logAudit('write', sheet.getName(), entry.targetRow, entry.employeeName,
+    logAudit(auditAction, sheet.getName(), entry.targetRow, entry.employeeName,
       entry.startTime + '-' + entry.endTime + ' ' + (entry.jobOrder || ''), flags.actorEmail);
   });
 
@@ -424,17 +544,19 @@ function coreProcessEntries(sheet, rawEntries, flags) {
         '-' + Utilities.formatDate(e.endTime, Session.getScriptTimeZone(), 'HH:mm') +
         (e.jobOrder ? ' (' + e.jobOrder + ')' : '');
     }).join('; ');
+    var actionVerb = flags.isEdit ? 'Updated' : 'Saved';
     createNotification(flags.actorEmail,
-      'Saved ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +
+      actionVerb + ' ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +
       ' (' + totalHoursSum.toFixed(1) + ' hrs) on ' + sheet.getName() + ': ' + entrySummary,
       'timesheet_approved', '');
   } catch (notifErr) {
     Logger.log('Failed to create notification: ' + notifErr);
   }
 
+  var resultVerb = flags.isEdit ? 'Updated' : 'Saved';
   return {
     success: true,
-    message: 'Saved ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +
+    message: resultVerb + ' ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +
       ' (' + totalHoursSum.toFixed(1) + ' hrs total) on "' + sheet.getName() + '".'
   };
 }

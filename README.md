@@ -16,7 +16,7 @@ JSON Web App so the standalone frontend below can call it.
 - `ai.js` — Cloudflare Workers AI-backed natural language ("QuickFill") shift parsing
 - `EntriesList.gs` — filtered/searched/paginated timesheet entry listing
 - `ReportCode.js`, `ScheduledReports.gs`, `ExcelGen.gs` — OT report preview/send/scheduling + Excel export
-- `Undo.gs`, `Templates.gs`, `Audit.gs`, `CompanyInfo.gs`, `Guard.gs` — undo-last-save, shift templates, audit log, company branding, sheet-layout guards
+- `Undo.gs`, `Templates.gs`, `Audit.gs`, `CompanyInfo.gs`, `Guard.gs`, `fileformat.gs` — undo-last-save, shift templates, audit log, company branding, sheet-layout guards, file format handling
 - `Form.html`, `ReportForm.html`, `*.html` — the original Sheets-bound dialogs (menu-launched)
 
 ## Architecture

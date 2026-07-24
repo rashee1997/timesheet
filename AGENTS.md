@@ -25,7 +25,7 @@ backend capability, add the handler here and whitelist it in `Api.gs`'s
 - `ai.js` — Cloudflare Workers AI-backed QuickFill natural-language shift parsing
 - `EntriesList.gs` — filtered/searched/paginated timesheet entry listing
 - `ReportCode.js`, `ScheduledReports.gs`, `ExcelGen.gs` — OT report preview/send/scheduling + Excel export
-- `Undo.gs`, `Templates.gs`, `Audit.gs`, `CompanyInfo.gs`, `Guard.gs` — undo-last-save, shift templates, audit log, company branding, sheet-layout guards
+- `Undo.gs`, `Templates.gs`, `Audit.gs`, `CompanyInfo.gs`, `Guard.gs`, `fileformat.gs` — undo-last-save, shift templates, audit log, company branding, sheet-layout guards, file format handling
 - `Form.html`, `ReportForm.html`, `*.html` — original Sheets-bound menu dialogs (still live, separate from the Web App API)
 
 ## Development / deployment

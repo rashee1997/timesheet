@@ -268,10 +268,10 @@
   <?!= HtmlService.createHtmlOutputFromFile('ProgressModal').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('CompanySettings').getContent(); ?>
 
-  <script>
-    <?!= HtmlService.createHtmlOutputFromFile('SharedUi').getContent(); ?>
-    <?!= HtmlService.createHtmlOutputFromFile('DarkMode').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('SharedUi').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('DarkMode').getContent(); ?>
 
+  <script>
     const startDateInput = document.getElementById('startDate');
     const endDateInput = document.getElementById('endDate');
     const dateError = document.getElementById('dateError');

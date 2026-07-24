@@ -551,11 +551,11 @@
   <?!= HtmlService.createHtmlOutputFromFile('ConfirmModal').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('WeeklyView').getContent(); ?>
 
-  <script>
-    <?!= HtmlService.createHtmlOutputFromFile('SharedUi').getContent(); ?>
-    <?!= HtmlService.createHtmlOutputFromFile('OvernightHelper').getContent(); ?>
-    <?!= HtmlService.createHtmlOutputFromFile('DarkMode').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('SharedUi').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('OvernightHelper').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('DarkMode').getContent(); ?>
 
+  <script>
     const ACTIVE_SHEET_NAME = <?!= JSON.stringify(activeSheetName) ?>;
 
     const singleModeBtn = document.getElementById('singleModeBtn');

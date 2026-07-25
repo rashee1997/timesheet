@@ -1,8 +1,8 @@
 /**
- * CLOUDFLARE.GS — all AI plumbing via Cloudflare AI Gateway
+ * AI.GS — all AI plumbing via Cloudflare AI Gateway
  * -------------------------------------------------------------------------
  * This file owns:
- *   1. Credentials storage (setupCloudflareCredentials, askAndSetCloudflareCredentials)
+ *   1. Credentials storage (askAndSetCloudflareCredentials / setCloudflareCredentials)
  *      and the shared low-level caller with retries, backoff, and JSON validation.
  *   2. parseNaturalLanguageEntries() & parseNaturalLanguageEntriesWithImage() —
  *      converts pasted shift notes/images into structured entries.
@@ -17,7 +17,6 @@ const CLOUDFLARE_API_TOKEN_PROPERTY = 'CLOUDFLARE_API_TOKEN';
 
 const CLOUDFLARE_MAX_ATTEMPTS = 3;
 const CLOUDFLARE_TIMEOUT_BACKOFF_MS = [500, 1500, 3500];
-const CLOUDFLARE_FETCH_TIMEOUT_MS = 60000;
 const AI_PARSE_MAX_ENTRIES = 80;
 const AI_PARSE_MAX_INPUT_CHARS = 6000;
 
@@ -25,6 +24,10 @@ const CLOUDFLARE_GATEWAY_ID = 'default';
 const GEMINI_VISION_MODEL_PRIMARY = 'google-ai-studio/gemini-3.6-flash';
 const GEMINI_VISION_MODEL_FALLBACK = 'google-ai-studio/gemini-3.1-flash-lite';
 const AI_PARSE_MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024;
+const AI_ALLOWED_IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+// Vision calls share one total attempt budget across primary + fallback models.
+const VISION_TOTAL_ATTEMPT_BUDGET = 3;
+const VISION_PER_MODEL_ATTEMPT_CAP = 2;
 
 // ---------------------------------------------------------------------
 // QUICKFILL PROMPT TEMPLATE
@@ -130,16 +133,6 @@ Return ONLY this JSON format:
 // CREDENTIAL STORAGE FUNCTIONS
 // ---------------------------------------------------------------------
 
-function setupCloudflareCredentials() {
-  const accountId = 'YOUR_CLOUDFLARE_ACCOUNT_ID_HERE';
-  const apiToken = 'YOUR_CLOUDFLARE_API_TOKEN_HERE';
-
-  if (accountId === 'YOUR_CLOUDFLARE_ACCOUNT_ID_HERE' || apiToken === 'YOUR_CLOUDFLARE_API_TOKEN_HERE') {
-    throw new Error('Please replace the placeholder values with actual Cloudflare credentials.');
-  }
-  setCloudflareCredentials(accountId, apiToken);
-}
-
 function askAndSetCloudflareCredentials() {
   try {
     const ui = SpreadsheetApp.getUi();
@@ -160,7 +153,7 @@ function askAndSetCloudflareCredentials() {
     setCloudflareCredentials(accountId, apiToken);
     ui.alert('Cloudflare credentials saved successfully!');
   } catch (e) {
-    Logger.log('Could not open spreadsheet UI prompts. Run setupCloudflareCredentials() instead.');
+    Logger.log('Could not open spreadsheet UI prompts. Run setCloudflareCredentials(accountId, apiToken) instead.');
     throw e;
   }
 }
@@ -184,19 +177,23 @@ function setCloudflareCredentials(accountId, apiToken) {
 
 /**
  * Handles HTTP requests with retries, status code evaluation, backoff, and JSON extraction.
+ * Returns { success, data|error, attempts } — attempts lets callers share a
+ * total retry budget across a primary + fallback model.
  */
-function executeFetchWithRetry(url, headers, payload, modelName) {
+function executeFetchWithRetry(url, headers, payload, modelName, maxAttempts) {
+  const attemptCap = maxAttempts || CLOUDFLARE_MAX_ATTEMPTS;
   let lastError = 'Unknown error.';
+  let attempts = 0;
   const options = {
     method: 'post',
     contentType: 'application/json',
     headers: headers,
     payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-    timeout: CLOUDFLARE_FETCH_TIMEOUT_MS
+    muteHttpExceptions: true
   };
 
-  for (let attempt = 0; attempt < CLOUDFLARE_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < attemptCap; attempt++) {
+    attempts = attempt + 1;
     if (attempt > 0) {
       Utilities.sleep(CLOUDFLARE_TIMEOUT_BACKOFF_MS[attempt - 1] || 3000);
     }
@@ -218,7 +215,7 @@ function executeFetchWithRetry(url, headers, payload, modelName) {
           const parsed = JSON.parse(resText);
           errDetails = parsed.errors?.[0]?.message || parsed.error?.message || resText;
         } catch (ignored) {}
-        return { success: false, error: `${modelName} Error (Status ${code}): ${errDetails}` };
+        return { success: false, error: `${modelName} Error (Status ${code}): ${errDetails}`, attempts: attempts };
       }
 
       const resJson = JSON.parse(resText);
@@ -240,16 +237,16 @@ function executeFetchWithRetry(url, headers, payload, modelName) {
         rawText = rawText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/, '');
       }
 
-      return { success: true, data: JSON.parse(rawText) };
+      return { success: true, data: JSON.parse(rawText), attempts: attempts };
     } catch (e) {
       lastError = `Network/Parsing Error: ${e}`;
       Logger.log(`Fetch attempt ${attempt + 1} failed: ${lastError}`);
     }
   }
-  return { success: false, error: `${lastError} (gave up after ${CLOUDFLARE_MAX_ATTEMPTS} attempts)` };
+  return { success: false, error: `${lastError} (gave up after ${attemptCap} attempts)`, attempts: attempts };
 }
 
-function callCloudflareAiJson(prompt, temperature, messages) {
+function callCloudflareAiJson(prompt, temperature, messages, maxAttempts) {
   const scriptProperties = PropertiesService.getScriptProperties();
   const accountId = scriptProperties.getProperty(CLOUDFLARE_ACCOUNT_ID_PROPERTY);
   const apiToken = scriptProperties.getProperty(CLOUDFLARE_API_TOKEN_PROPERTY);
@@ -277,47 +274,13 @@ function callCloudflareAiJson(prompt, temperature, messages) {
     'cf-aig-gateway-id': 'default'
   };
 
-  return executeFetchWithRetry(url, headers, payload, CLOUDFLARE_MODEL);
+  return executeFetchWithRetry(url, headers, payload, CLOUDFLARE_MODEL, maxAttempts);
 }
 
 
 // ---------------------------------------------------------------------
 // CONTEXT & VALIDATION HELPERS
 // ---------------------------------------------------------------------
-
-/**
- * Calculates Levenshtein distance between two strings (for fuzzy matching).
- */
-function levenshteinDistance(a, b) {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-
-  const matrix = [];
-
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
-
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
-        );
-      }
-    }
-  }
-
-  return matrix[b.length][a.length];
-}
 
 /**
  * Returns dynamic context for the sheet (employees, job orders, dates).
@@ -360,22 +323,56 @@ function getSheetContext(sheetName) {
   };
 }
 
-// Context cache for performance (5-minute TTL)
-const CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000;
-const contextCache = {};
+// Sheet context cache (CacheService — survives across executions, unlike a
+// script-global object, which dies with each request).
+const CONTEXT_CACHE_TTL_SEC = 300;
 
 /**
  * Gets sheet context with caching to avoid repeated fetches.
  */
 function getSheetContextCached(sheetName) {
-  const cached = contextCache[sheetName];
-  if (cached && (Date.now() - cached.timestamp) < CONTEXT_CACHE_TTL_MS) {
-    return cached.data;
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'sheetContext_' + String(sheetName || '');
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      // fall through and recompute on a corrupt entry
+    }
   }
 
   const context = getSheetContext(sheetName);
-  contextCache[sheetName] = { data: context, timestamp: Date.now() };
+  try {
+    const serialized = JSON.stringify(context);
+    if (serialized.length < 95000) {
+      cache.put(cacheKey, serialized, CONTEXT_CACHE_TTL_SEC);
+    }
+  } catch (e) {
+    // cache write failures are non-fatal
+  }
   return context;
+}
+
+/**
+ * Fills the QuickFill prompt template with sheet context, optionally
+ * appending extra user text under the given heading.
+ */
+function buildQuickFillPrompt(context, extraText, extraHeading) {
+  let prompt = QUICKFILL_PROMPT_TEMPLATE
+    .replace(/{today}/g, context.todayStr)
+    .replace(/{yesterday}/g, context.yesterdayStr)
+    .replace(/{tomorrow}/g, context.tomorrowStr)
+    .replace(/{weekday}/g, context.weekday)
+    .replace(/{sheetPeriodLine}/g, context.sheetPeriodLine)
+    .replace(/{employeeNames}/g, JSON.stringify(context.employeeNames))
+    .replace(/{jobOrders}/g, JSON.stringify(context.jobOrders))
+    .replace(/{defaultYear}/g, context.defaultYear)
+    .replace(/{defaultMonth}/g, context.defaultMonth);
+  if (extraText) {
+    prompt += '\n\n' + extraHeading + ':\n"""\n' + extraText + '\n"""';
+  }
+  return prompt;
 }
 
 /**
@@ -454,7 +451,7 @@ function validateAndCleanEntries(data, initialWarnings, sheetName) {
         let bestMatch = null;
         let bestDistance = Infinity;
         for (let j = 0; j < validEmployeeNames.length; j++) {
-          const distance = levenshteinDistance(lowerEmp, validEmployeeNamesLower[j]);
+          const distance = levenshtein(lowerEmp, validEmployeeNamesLower[j]);
           if (distance < bestDistance) {
             bestDistance = distance;
             bestMatch = validEmployeeNames[j];
@@ -581,18 +578,7 @@ function parseNaturalLanguageEntries(text, sheetName) {
     const context = getSheetContextCached(sheetName);
     const input = String(text).trim().slice(0, AI_PARSE_MAX_INPUT_CHARS);
 
-    // Replace placeholders in the template with dynamic context
-    const prompt = QUICKFILL_PROMPT_TEMPLATE
-      .replace(/{today}/g, context.todayStr)
-      .replace(/{yesterday}/g, context.yesterdayStr)
-      .replace(/{tomorrow}/g, context.tomorrowStr)
-      .replace(/{weekday}/g, context.weekday)
-      .replace(/{sheetPeriodLine}/g, context.sheetPeriodLine)
-      .replace(/{employeeNames}/g, JSON.stringify(context.employeeNames))
-      .replace(/{jobOrders}/g, JSON.stringify(context.jobOrders))
-      .replace(/{defaultYear}/g, context.defaultYear)
-      .replace(/{defaultMonth}/g, context.defaultMonth)
-      + `\n\nINPUT NOTES:\n"""\n${input}\n"""`;
+    const prompt = buildQuickFillPrompt(context, input, 'INPUT NOTES');
 
     const result = callCloudflareAiJson(prompt, 0.2);
     if (!result.success) return { success: false, error: result.error };
@@ -625,7 +611,7 @@ function parseNaturalLanguageEntries(text, sheetName) {
 // VISION (IMAGE) API — Multimodal Cloudflare model for screenshot parsing
 // ---------------------------------------------------------------------
 
-function callGatewayChatCompletion(url, apiToken, model, messages, temperature) {
+function callGatewayChatCompletion(url, apiToken, model, messages, temperature, maxAttempts) {
   const payload = {
     model: model,
     messages: messages,
@@ -634,7 +620,7 @@ function callGatewayChatCompletion(url, apiToken, model, messages, temperature) 
     response_format: { type: 'json_object' }
   };
   const headers = { 'Authorization': 'Bearer ' + apiToken };
-  return executeFetchWithRetry(url, headers, payload, model);
+  return executeFetchWithRetry(url, headers, payload, model, maxAttempts);
 }
 
 function callCloudflareAiVision(messages, temperature) {
@@ -648,17 +634,25 @@ function callCloudflareAiVision(messages, temperature) {
 
   const url = 'https://gateway.ai.cloudflare.com/v1/' + accountId + '/' + CLOUDFLARE_GATEWAY_ID + '/compat/chat/completions';
 
-  const primary = callGatewayChatCompletion(url, apiToken, GEMINI_VISION_MODEL_PRIMARY, messages, temperature);
+  const primary = callGatewayChatCompletion(url, apiToken, GEMINI_VISION_MODEL_PRIMARY, messages, temperature, VISION_PER_MODEL_ATTEMPT_CAP);
   if (primary.success) return primary;
 
+  const attemptsLeft = VISION_TOTAL_ATTEMPT_BUDGET - (primary.attempts || VISION_PER_MODEL_ATTEMPT_CAP);
+  if (attemptsLeft <= 0) return primary;
+
   Logger.log(GEMINI_VISION_MODEL_PRIMARY + ' failed, falling back to ' + GEMINI_VISION_MODEL_FALLBACK + ': ' + primary.error);
-  return callGatewayChatCompletion(url, apiToken, GEMINI_VISION_MODEL_FALLBACK, messages, temperature);
+  return callGatewayChatCompletion(url, apiToken, GEMINI_VISION_MODEL_FALLBACK, messages, temperature,
+    Math.min(VISION_PER_MODEL_ATTEMPT_CAP, attemptsLeft));
 }
 
 function parseNaturalLanguageEntriesWithImage(text, imageBase64, mimeType, sheetName) {
   try {
     if (!imageBase64) return { success: false, error: 'No image data received.' };
-    if (imageBase64.length > AI_PARSE_MAX_IMAGE_SIZE_BYTES) {
+    if (AI_ALLOWED_IMAGE_MIME_TYPES.indexOf(String(mimeType)) === -1) {
+      return { success: false, error: 'Unsupported image type. Use PNG, JPEG, WebP, or GIF.' };
+    }
+    // base64 encodes 3 bytes per 4 chars, so decoded size ≈ length * 3/4.
+    if ((imageBase64.length * 3) / 4 > AI_PARSE_MAX_IMAGE_SIZE_BYTES) {
       return { success: false, error: 'Image too large. Try a smaller screenshot.' };
     }
 
@@ -666,18 +660,7 @@ function parseNaturalLanguageEntriesWithImage(text, imageBase64, mimeType, sheet
     const context = getSheetContextCached(sheetName);
     const userText = String(text || '').trim().slice(0, AI_PARSE_MAX_INPUT_CHARS);
 
-    // Replace placeholders in the template with dynamic context
-    const userMsg = QUICKFILL_PROMPT_TEMPLATE
-      .replace(/{today}/g, context.todayStr)
-      .replace(/{yesterday}/g, context.yesterdayStr)
-      .replace(/{tomorrow}/g, context.tomorrowStr)
-      .replace(/{weekday}/g, context.weekday)
-      .replace(/{sheetPeriodLine}/g, context.sheetPeriodLine)
-      .replace(/{employeeNames}/g, JSON.stringify(context.employeeNames))
-      .replace(/{jobOrders}/g, JSON.stringify(context.jobOrders))
-      .replace(/{defaultYear}/g, context.defaultYear)
-      .replace(/{defaultMonth}/g, context.defaultMonth)
-      + (userText ? '\n\nADDITIONAL TEXT FROM USER:\n"""\n' + userText + '\n"""' : '');
+    const userMsg = buildQuickFillPrompt(context, userText, 'ADDITIONAL TEXT FROM USER');
 
     const imageDataUrl = 'data:' + mimeType + ';base64,' + imageBase64;
 

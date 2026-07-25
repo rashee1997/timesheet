@@ -14,10 +14,24 @@ function ensureAuditSheet_() {
 }
 
 function logAudit(action, sheetName, targetRow, employee, details, actorEmail) {
+  logAuditBatch([{ action: action, sheetName: sheetName, targetRow: targetRow, employee: employee, details: details }], actorEmail);
+}
+
+/**
+ * Appends many audit rows in ONE setValues call — a bulk save of N entries
+ * used to cost N appendRow round-trips.
+ * @param {Array<{action,sheetName,targetRow,employee,details}>} rows
+ */
+function logAuditBatch(rows, actorEmail) {
+  if (!rows || rows.length === 0) return;
   try {
     var sheet = ensureAuditSheet_();
     var user = actorEmail || Session.getActiveUser().getEmail() || 'unknown';
-    sheet.appendRow([new Date(), user, action, sheetName, targetRow || '', employee || '', details || '']);
+    var now = new Date();
+    var values = rows.map(function (r) {
+      return [now, user, r.action, r.sheetName, r.targetRow || '', r.employee || '', r.details || ''];
+    });
+    sheet.getRange(sheet.getLastRow() + 1, 1, values.length, AUDIT_HEADERS.length).setValues(values);
   } catch (e) {
     Logger.log('Audit log failed: ' + e);
   }

@@ -10,6 +10,11 @@
  */
 function onEdit(e) {
   if (!e || !e.range) return;
+
+  // Cheap row check first — most edits (headers, labels, other sheets' upper
+  // rows) bail out here before any SpreadsheetApp read happens.
+  if (e.range.getRow() + e.range.getNumRows() - 1 < CONFIG.DATA_START_ROW) return;
+
   var sheet = e.range.getSheet();
 
   try {
@@ -22,7 +27,7 @@ function onEdit(e) {
   var labelRow = sheet.getRange(CONFIG.LABEL_ROW, 1, 1, lastCol).getDisplayValues()[0];
   var startRow = e.range.getRow();
   var startCol = e.range.getColumn();
-  var reverted = false;
+  var revertedFormatA1 = [];
 
   for (var r = 0; r < e.range.getNumRows(); r++) {
     var row = startRow + r;
@@ -42,14 +47,14 @@ function onEdit(e) {
       var f = buildHourFormulas(row, blockCol);
       var formula = offset === 2 ? f.total : (offset === 3 ? f.normal : f.ot);
 
-      var cell = sheet.getRange(row, col);
-      cell.setFormula(formula);
-      cell.setNumberFormat('[h]:mm');
-      reverted = true;
+      sheet.getRange(row, col).setFormula(formula);
+      revertedFormatA1.push(getColumnLetter(col) + row);
     }
   }
 
-  if (reverted) {
+  if (revertedFormatA1.length > 0) {
+    // One RangeList call for the number formats instead of one per cell.
+    sheet.getRangeList(revertedFormatA1).setNumberFormat('[h]:mm');
     SpreadsheetApp.getActiveSpreadsheet().toast(
       'TOTAL/NORMAL/OT are calculated automatically and can\'t be edited directly — your change was reverted.',
       'Timesheet', 5

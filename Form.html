@@ -1075,7 +1075,7 @@
             const chip = document.createElement('div');
             chip.className = 'chip';
             chip.dataset.col = col;
-            chip.innerHTML = `${emp.name} <span class="remove-chip-btn">&times;</span>`;
+            chip.innerHTML = `${escapeHtml(emp.name)} <span class="remove-chip-btn">&times;</span>`;
             chip.querySelector('.remove-chip-btn').addEventListener('click', () => {
               selectedColsSet.delete(col);
               renderChips();

@@ -1,6 +1,6 @@
 /**
  * TIMESHEETS LIST — server-side filtered, searched, and paginated.
- * Reuses the same sheet/row-scanning helpers as ReportCode.js (findEmployeeBlocks,
+ * Reuses the same sheet/row-scanning helpers as ReportCode.gs (findEmployeeBlocks,
  * getHoursBetweenTimes, parseCellDate, isTimesheetSheet) but returns raw per-shift
  * rows instead of per-employee aggregate totals.
  */
@@ -35,6 +35,8 @@ function collectTimesheetEntries(startDateStr, endDateStr) {
 /** ponytail: 60s TTL over exact write-time invalidation of every date-range key; raise if staleness ever bites. */
 var TIMESHEET_SCAN_CACHE_TTL_SEC = 60;
 var TIMESHEET_SCAN_CACHE_INDEX_KEY = '_timesheetScanCacheKeys';
+// Apps Script caps each cache entry at 100KB; leave headroom for key overhead.
+var TIMESHEET_SCAN_CACHE_MAX_BYTES = 95000;
 
 /**
  * Cache-or-compute wrapper around a sheet scan. Mirrors the common Apps Script
@@ -56,7 +58,7 @@ function getCachedTimesheetScan_(cacheKey, computeFn) {
 
   try {
     var serialized = JSON.stringify(fresh);
-    if (serialized.length < 95000) { // Apps Script caps each cache entry at 100KB
+    if (serialized.length < TIMESHEET_SCAN_CACHE_MAX_BYTES) {
       cache.put(cacheKey, serialized, TIMESHEET_SCAN_CACHE_TTL_SEC);
       var indexRaw = cache.get(TIMESHEET_SCAN_CACHE_INDEX_KEY);
       var index = indexRaw ? JSON.parse(indexRaw) : [];
@@ -64,6 +66,10 @@ function getCachedTimesheetScan_(cacheKey, computeFn) {
         index.push(cacheKey);
         cache.put(TIMESHEET_SCAN_CACHE_INDEX_KEY, JSON.stringify(index), TIMESHEET_SCAN_CACHE_TTL_SEC);
       }
+    } else {
+      // Big date ranges silently re-scan every sheet on every call — leave a
+      // trace so the pattern is visible in the execution logs.
+      Logger.log('Timesheet scan too large to cache (' + serialized.length + ' bytes) for key ' + cacheKey);
     }
   } catch (e) {
     // cache write failures are non-fatal - fresh data is already computed
@@ -149,8 +155,8 @@ function scanTimesheetEntries_(startDate, endDate) {
             normalHours = 0;
             otHours = totalHours;
           } else {
-            normalHours = Math.min(8, totalHours);
-            otHours = totalHours > 8 ? totalHours - 8 : 0;
+            normalHours = Math.min(CONFIG.NORMAL_HOURS_PER_DAY, totalHours);
+            otHours = totalHours > CONFIG.NORMAL_HOURS_PER_DAY ? totalHours - CONFIG.NORMAL_HOURS_PER_DAY : 0;
           }
 
           entries.push({
@@ -187,7 +193,7 @@ function scanTimesheetEntries_(startDate, endDate) {
  * @param {boolean} [filters.otOnly]
  * @param {string} [filters.search]       fuzzy match against employee name or job order
  * @param {number} [filters.page]         1-indexed, default 1
- * @param {number} [filters.pageSize]     default 25, capped at 100
+ * @param {number} [filters.pageSize]     default 25, capped at 1000
  */
 function listTimesheetEntries(filters) {
   filters = filters || {};
@@ -270,7 +276,8 @@ function formatTimeCell(val, tz) {
   }
 }
 
-/** Case-insensitive substring match, falling back to per-word edit-distance <=2 for typo tolerance. */
+/** Case-insensitive substring match, falling back to per-word edit-distance <=2 for typo tolerance.
+ * (levenshtein lives in Shared.gs.) */
 function fuzzyMatches(query, target) {
   if (!query || !target) return false;
   var q = String(query).trim().toLowerCase();
@@ -283,21 +290,4 @@ function fuzzyMatches(query, target) {
     if (levenshtein(q, words[i]) <= 2) return true;
   }
   return false;
-}
-
-function levenshtein(a, b) {
-  var m = a.length, n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  var prev = [];
-  for (var j = 0; j <= n; j++) prev[j] = j;
-  for (var i = 1; i <= m; i++) {
-    var curr = [i];
-    for (var j2 = 1; j2 <= n; j2++) {
-      var cost = a.charAt(i - 1) === b.charAt(j2 - 1) ? 0 : 1;
-      curr[j2] = Math.min(prev[j2] + 1, curr[j2 - 1] + 1, prev[j2 - 1] + cost);
-    }
-    prev = curr;
-  }
-  return prev[n];
 }

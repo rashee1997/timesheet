@@ -3,15 +3,24 @@ var EMPLOYEE_EMAILS_PROP = 'employeeEmails';
 
 var WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+// Per-execution memo: buildHourFormulas and Guard.onEdit call getRestDays for
+// every entry/cell, and each call was a fresh PropertiesService read.
+var _restDaysMemo = null;
+
 function getRestDays() {
+  if (_restDaysMemo) return _restDaysMemo;
   var raw = PropertiesService.getScriptProperties().getProperty(REST_DAYS_PROP);
-  if (!raw) return [5];
-  try {
-    var parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [5];
-  } catch (e) {
-    return [5];
+  var result = [5];
+  if (raw) {
+    try {
+      var parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) result = parsed;
+    } catch (e) {
+      // fall back to default
+    }
   }
+  _restDaysMemo = result;
+  return result;
 }
 
 function saveRestDays(days) {
@@ -24,6 +33,7 @@ function saveRestDays(days) {
     }
   }
   PropertiesService.getScriptProperties().setProperty(REST_DAYS_PROP, JSON.stringify(days));
+  _restDaysMemo = null;
   return { success: true, message: 'Rest days updated.' };
 }
 
@@ -53,22 +63,18 @@ function saveEmployeeEmails(map) {
   if (typeof map !== 'object' || map === null) {
     return { success: false, error: 'Invalid email map.' };
   }
-  PropertiesService.getScriptProperties().setProperty(EMPLOYEE_EMAILS_PROP, JSON.stringify(map));
-  return { success: true, message: 'Employee emails saved.' };
+  try {
+    withScriptLock_(function () {
+      PropertiesService.getScriptProperties().setProperty(EMPLOYEE_EMAILS_PROP, JSON.stringify(map));
+    });
+    return { success: true, message: 'Employee emails saved.' };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 }
 
 function getEmployeeEmailSettings() {
   var employees = getAllEmployees();
   var emailMap = getEmployeeEmailMap();
   return { employees: employees, emailMap: emailMap };
-}
-
-function findEmailForEmployee(name, emailMap) {
-  if (emailMap[name]) return emailMap[name];
-  var lower = String(name).toLowerCase().trim();
-  var keys = Object.keys(emailMap);
-  for (var i = 0; i < keys.length; i++) {
-    if (keys[i].toLowerCase().trim() === lower) return emailMap[keys[i]];
-  }
-  return null;
 }

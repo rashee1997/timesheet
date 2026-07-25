@@ -27,11 +27,11 @@ function showWeeklyView(sheetName) {
       var html = '';
       data.forEach(function (row, idx) {
         html += '<div style="border-bottom:1px solid var(--border);padding:8px 0;display:flex;justify-content:space-between;align-items:center;gap:6px;">' +
-          '<span style="font-weight:600;">' + row.date + '</span>' +
-          '<span style="flex:1;">' + row.name + '</span>' +
-          '<span>' + row.start + '-' + row.end + '</span>' +
-          '<span style="color:var(--accent-dark);max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + row.job + '</span>' +
-          '<button type="button" class="weekly-edit-btn" data-date="' + row.dateIso + '" data-emp-col="' + row.employeeColumn + '" data-sheet="' + sheetName + '" style="background:var(--accent-tint);color:var(--accent-dark);border:1px solid var(--accent);border-radius:4px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;">Edit</button>' +
+          '<span style="font-weight:600;">' + escapeHtml(row.date) + '</span>' +
+          '<span style="flex:1;">' + escapeHtml(row.name) + '</span>' +
+          '<span>' + escapeHtml(row.start) + '-' + escapeHtml(row.end) + '</span>' +
+          '<span style="color:var(--accent-dark);max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(row.job) + '</span>' +
+          '<button type="button" class="weekly-edit-btn" data-date="' + escapeHtml(row.dateIso) + '" data-emp-col="' + row.employeeColumn + '" data-sheet="' + escapeHtml(sheetName) + '" style="background:var(--accent-tint);color:var(--accent-dark);border:1px solid var(--accent);border-radius:4px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;">Edit</button>' +
           '</div>';
       });
       document.getElementById('weeklyViewContent').innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Showing the latest entries on the active sheet. Click Edit to modify.</div>' + html;

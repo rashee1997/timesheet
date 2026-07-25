@@ -273,9 +273,55 @@ function previewOtReport(startDateStr, endDateStr, selectedEmployees) {
 // EMAIL RECIPIENT SEARCH
 // ---------------------------------------------------------------------
 
+var CONTACT_RESULT_CAP = 12;          // max suggestions returned per search
+var PERSONAL_CONTACT_RESULT_CAP = 8;  // personal contacts fill at most this many before directory sources
+var CONTACT_LIST_CACHE_KEY = 'flattenedContacts_v1';
+var CONTACT_LIST_CACHE_TTL_SEC = 300;
+
+/**
+ * Flattened {name, email} list of ALL personal contacts, cached ~5 min so
+ * every keystroke's search doesn't re-fetch the whole contact book.
+ */
+function getFlattenedContacts_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(CONTACT_LIST_CACHE_KEY);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      // fall through and refetch on a corrupt entry
+    }
+  }
+
+  var flat = [];
+  try {
+    var contacts = ContactsApp.getContacts();
+    contacts.forEach(function (c) {
+      var fullName = (c.getGivenName() + ' ' + c.getFamilyName()).trim();
+      c.getEmails().forEach(function (em) {
+        var email = em.getAddress();
+        if (email) flat.push({ name: fullName || email, email: email });
+      });
+    });
+  } catch (e) {
+    Logger.log('getFlattenedContacts_: Contacts service unavailable: ' + e);
+    return flat;
+  }
+
+  try {
+    var serialized = JSON.stringify(flat);
+    if (serialized.length < 95000) {
+      cache.put(CONTACT_LIST_CACHE_KEY, serialized, CONTACT_LIST_CACHE_TTL_SEC);
+    }
+  } catch (e) {
+    // cache write failures are non-fatal
+  }
+  return flat;
+}
+
 /**
  * Auto-fetches recipients matching query, aggregating from:
- *  1. Personal Google Contacts.
+ *  1. Personal Google Contacts (cached flattened list).
  *  2. Domain directory profiles via the People API Advanced service.
  *  3. AdminDirectory API (Directory SDK) fallback.
  */
@@ -286,31 +332,20 @@ function searchContacts(query) {
   const q = String(query).trim().toLowerCase();
   if (!q) return results;
 
-  // 1. Personal Google Contacts
-  try {
-    const contacts = ContactsApp.getContacts();
-    for (let i = 0; i < contacts.length && results.length < 8; i++) {
-      const c = contacts[i];
-      const fullName = (c.getGivenName() + ' ' + c.getFamilyName()).trim();
-      const nameMatches = fullName.toLowerCase().indexOf(q) !== -1;
-      const emails = c.getEmails();
-      for (let j = 0; j < emails.length; j++) {
-        const email = emails[j].getAddress();
-        if (!email || seen[email]) continue;
-        const emailMatches = email.toLowerCase().indexOf(q) !== -1;
-        if (nameMatches || emailMatches) {
-          seen[email] = true;
-          results.push({ name: fullName || email, email: email });
-        }
-      }
+  // 1. Personal Google Contacts (from cache)
+  const flat = getFlattenedContacts_();
+  for (let i = 0; i < flat.length && results.length < PERSONAL_CONTACT_RESULT_CAP; i++) {
+    const c = flat[i];
+    if (seen[c.email]) continue;
+    if (c.name.toLowerCase().indexOf(q) !== -1 || c.email.toLowerCase().indexOf(q) !== -1) {
+      seen[c.email] = true;
+      results.push({ name: c.name, email: c.email });
     }
-  } catch (e) {
-    Logger.log('searchContacts: Contacts service unavailable: ' + e);
   }
 
   // 2. Organization Directory search via the People API Advanced service
   try {
-    if (typeof People !== 'undefined' && results.length < 12) {
+    if (typeof People !== 'undefined' && results.length < CONTACT_RESULT_CAP) {
       const peopleSearch = People.People.searchDirectoryPeople({
         query: q,
         readMask: 'names,emailAddresses',
@@ -321,7 +356,7 @@ function searchContacts(query) {
         peopleSearch.people.forEach(function (person) {
           const nameObj = person.names && person.names[0];
           const emailObj = person.emailAddresses && person.emailAddresses[0];
-          if (emailObj && emailObj.value && !seen[emailObj.value] && results.length < 12) {
+          if (emailObj && emailObj.value && !seen[emailObj.value] && results.length < CONTACT_RESULT_CAP) {
             seen[emailObj.value] = true;
             results.push({ name: nameObj ? nameObj.displayName : emailObj.value, email: emailObj.value });
           }
@@ -334,14 +369,14 @@ function searchContacts(query) {
 
   // 3. Fallback: Admin SDK Directory API
   try {
-    if (typeof AdminDirectory !== 'undefined' && results.length < 12) {
+    if (typeof AdminDirectory !== 'undefined' && results.length < CONTACT_RESULT_CAP) {
       const domain = Session.getActiveUser().getEmail().split('@')[1];
       const safeQ = q.replace(/[^a-z0-9 ]/gi, '');
       const page = AdminDirectory.Users.list({ domain: domain, query: 'name:' + safeQ + '*', maxResults: 8 });
       if (page && page.users) {
         page.users.forEach(function (u) {
           const email = u.primaryEmail;
-          if (email && !seen[email] && results.length < 12) {
+          if (email && !seen[email] && results.length < CONTACT_RESULT_CAP) {
             seen[email] = true;
             results.push({ name: u.name ? u.name.fullName : email, email: email });
           }
@@ -416,6 +451,10 @@ function processSendReport(payload) {
       throw new Error('Excel generation failed: ' + (xlsxErr.message || xlsxErr) +
         '. The report was generated but the Excel file could not be created. Uncheck "Attach report as Excel" and try again.');
     }
+  }
+
+  if (MailApp.getRemainingDailyQuota() <= 0) {
+    throw new Error('Daily email quota is exhausted — the report could not be sent. Quota resets within 24 hours; try again later.');
   }
 
   try {
@@ -603,11 +642,17 @@ function sendPerEmployeeReports(payload) {
       throw new Error('Please select a date range.');
     }
 
+    // One scan + one aggregate report; each employee's "single report" is
+    // derived in memory instead of re-scanning every sheet per employee.
     var report = generateOtReport(payload.startDate, payload.endDate);
+    var scan = payload.attachExcel ? collectTimesheetEntries(payload.startDate, payload.endDate) : null;
     var emailMap = getEmployeeEmailMap();
     var sent = 0;
     var skipped = [];
     var errors = [];
+    var quotaExhausted = false;
+
+    var mailQuota = MailApp.getRemainingDailyQuota();
 
     report.rows.forEach(function (row) {
       var email = findEmailForEmployee(row.name, emailMap);
@@ -616,15 +661,29 @@ function sendPerEmployeeReports(payload) {
         return;
       }
 
+      if (quotaExhausted || mailQuota - sent <= 0) {
+        quotaExhausted = true;
+        errors.push(row.name + ' (' + email + '): daily email quota exhausted');
+        return;
+      }
+
       try {
-        var singleReport = generateOtReport(payload.startDate, payload.endDate, [row.name]);
+        var singleReport = {
+          startDate: report.startDate,
+          endDate: report.endDate,
+          rangeCalendarDays: report.rangeCalendarDays,
+          rangeIncludesFuture: report.rangeIncludesFuture,
+          futureRangeNote: report.futureRangeNote,
+          dataLagNote: report.dataLagNote,
+          rows: [row],
+          skippedSheets: report.skippedSheets
+        };
         var html = buildSingleEmployeeHtml(singleReport, row.name);
         var text = buildSingleEmployeeText(singleReport, row.name);
 
         var attachments = [];
-        if (payload.attachExcel) {
+        if (payload.attachExcel && scan) {
           try {
-            var scan = collectTimesheetEntries(payload.startDate, payload.endDate);
             attachments = buildReportExcel(singleReport, scan.entries);
           } catch (xlErr) {
             Logger.log('Excel generation failed for ' + row.name + ': ' + xlErr);
@@ -647,6 +706,7 @@ function sendPerEmployeeReports(payload) {
 
     var msg = 'Sent individual reports to ' + sent + ' employee(s).';
     if (skipped.length > 0) msg += ' Skipped (no email configured): ' + skipped.join(', ') + '.';
+    if (quotaExhausted) msg += ' Stopped early: daily email quota exhausted — remaining reports were not sent.';
     if (errors.length > 0) msg += ' Failed: ' + errors.length + '.';
 
     logAudit('send_per_employee', null, null, null,
@@ -699,16 +759,6 @@ function previewPerEmployeeReports(startDateStr, endDateStr) {
     Logger.log('previewPerEmployeeReports error: ' + err);
     return { success: false, error: err.message || String(err) };
   }
-}
-
-function findEmailForEmployee(name, emailMap) {
-  if (emailMap[name]) return emailMap[name];
-  var lower = String(name).toLowerCase().trim();
-  var keys = Object.keys(emailMap);
-  for (var i = 0; i < keys.length; i++) {
-    if (keys[i].toLowerCase().trim() === lower) return emailMap[keys[i]];
-  }
-  return null;
 }
 
 function buildSingleEmployeeHtml(report, employeeName) {

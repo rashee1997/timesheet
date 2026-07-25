@@ -11,6 +11,10 @@
  * listTimesheetEntries (EntriesList.gs).
  */
 
+// Interactive chat: fail fast (single attempt) instead of the batch paths'
+// multi-retry backoff, so the user isn't left staring at a spinner.
+var QUERY_ASSISTANT_MAX_ATTEMPTS = 1;
+
 /**
  * @param {Object} payload  { messages: [{ role: "user"|"assistant", content }], context?: { currentDateRange, currentFilters } }
  * @returns {Object} { success, role: "assistant", content, entries?, report? }
@@ -143,11 +147,21 @@ function extractQueryIntent(messages, context) {
     messages.map(function (m) { return { role: m.role, content: m.content }; })
   );
 
-  var result = callCloudflareAiJson(null, 0.1, extractMessages);
+  var result = callCloudflareAiJson(null, 0.1, extractMessages, QUERY_ASSISTANT_MAX_ATTEMPTS);
   if (!result.success) return { error: 'Could not understand the question: ' + result.error };
 
   var intent = result.data;
   if (!intent.action) return { error: 'Could not determine what to look up from that question.' };
+
+  // Context's date range fills in first (before the current-month default,
+  // which would otherwise always win and make this fallback unreachable).
+  if (context && context.currentDateRange && !intent.startDate && !intent.endDate) {
+    var dateParts = context.currentDateRange.split(' to ');
+    if (dateParts.length === 2) {
+      intent.startDate = dateParts[0];
+      intent.endDate = dateParts[1];
+    }
+  }
 
   // Default date range (current month) if not specified
   if (!intent.startDate) {
@@ -156,15 +170,6 @@ function extractQueryIntent(messages, context) {
   }
   if (!intent.endDate) {
     intent.endDate = today;
-  }
-
-  // If context has date range and intent doesn't specify, use context
-  if (context && context.currentDateRange && !intent.startDate && !intent.endDate) {
-    var dateParts = context.currentDateRange.split(' to ');
-    if (dateParts.length === 2) {
-      intent.startDate = dateParts[0];
-      intent.endDate = dateParts[1];
-    }
   }
 
   // If context has filters and intent doesn't override them, use context
@@ -214,8 +219,8 @@ function executeDataQuery(intent) {
       endDate: intent.endDate,
       employees: intent.employees && intent.employees.length > 0 ? intent.employees : undefined,
       jobOrder: intent.jobOrder || undefined,
-      minHours: intent.minHours || undefined,
-      maxHours: intent.maxHours || undefined,
+      minHours: typeof intent.minHours === 'number' ? intent.minHours : undefined,
+      maxHours: typeof intent.maxHours === 'number' ? intent.maxHours : undefined,
       search: intent.search || undefined,
       page: 1,
       pageSize: 1000
@@ -293,7 +298,7 @@ function generateQueryAnswer(conversation, intent, queryResult) {
     conversation.map(function (m) { return { role: m.role, content: m.content }; })
   );
 
-  var result = callCloudflareAiJson(null, 0.3, answerMessages);
+  var result = callCloudflareAiJson(null, 0.3, answerMessages, QUERY_ASSISTANT_MAX_ATTEMPTS);
   var content = result.success
     ? (result.data.answer || String(result.data))
     : 'Sorry, I could not generate an answer right now.';

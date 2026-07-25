@@ -43,7 +43,8 @@ const CONFIG = {
   DATA_START_ROW: 4,       // first row of actual daily data
   DATE_COL: 1,             // column A
   COLS_PER_EMPLOYEE: 6,    // START, END, TOTAL HRS, NORMAL, OT, JOB ORDER
-  MAX_REASONABLE_HOURS: 16 // shifts longer than this need explicit confirmation
+  MAX_REASONABLE_HOURS: 16, // shifts longer than this need explicit confirmation
+  NORMAL_HOURS_PER_DAY: 8  // hours capped as "normal" before OT starts (non-rest days)
 };
 
 // Full name + short name for every month, used for the soft sanity check
@@ -114,7 +115,7 @@ function getEmployeesForSheet(sheetName) {
  * grid starting at a fixed column. A block added slightly off-grid (an
  * extra/missing column earlier on the sheet) is still found correctly,
  * and this is the single source of truth shared with the save-time
- * validation in coreProcessEntries and the report scan in ReportCode.js.
+ * validation in coreProcessEntries and the report scan in ReportCode.gs.
  */
 function findEmployeeBlocks(sheet) {
   const lastCol = sheet.getLastColumn();
@@ -135,7 +136,7 @@ function findEmployeeBlocks(sheet) {
 /**
  * Distinct job order values already used, sorted by frequency (most-used first).
  * v2: only scans sheets that structurally look like timesheets
- * (isTimesheetSheet lives in Report.gs — same project, same global scope),
+ * (isTimesheetSheet lives in ReportCode.gs — same project, same global scope),
  * and de-duplicates case-insensitively (keeps first-seen casing).
  * v3: frequency-sorted via getJobOrdersByFrequency() in UiUtils.gs.
  */
@@ -227,7 +228,6 @@ function getEntryForEdit(payload) {
     if (!sheet) return { success: false, error: 'The sheet "' + payload.sheetName + '" no longer exists.' };
 
     var lastRow = sheet.getLastRow();
-    var lastCol = sheet.getLastColumn();
     if (lastRow < CONFIG.DATA_START_ROW) return { success: false, error: 'Sheet has no data rows.' };
 
     // Validate employee column is a real START block
@@ -239,8 +239,8 @@ function getEntryForEdit(payload) {
     }
     if (!block) return { success: false, error: 'Employee column ' + empCol + ' is not valid on this sheet.' };
 
-    // Find the target row by scanning column A for the date
-    var allValues = sheet.getRange(CONFIG.DATA_START_ROW, 1, lastRow - CONFIG.DATA_START_ROW + 1, lastCol).getValues();
+    // Find the target row by scanning column A only (no need to read the whole grid)
+    var dateColVals = sheet.getRange(CONFIG.DATA_START_ROW, CONFIG.DATE_COL, lastRow - CONFIG.DATA_START_ROW + 1, 1).getValues();
     var tz = Session.getScriptTimeZone();
     var dateKey;
     try {
@@ -250,8 +250,8 @@ function getEntryForEdit(payload) {
     }
 
     var targetRowIdx = -1;
-    for (var r = 0; r < allValues.length; r++) {
-      var d = parseCellDate(allValues[r][CONFIG.DATE_COL - 1]);
+    for (var r = 0; r < dateColVals.length; r++) {
+      var d = parseCellDate(dateColVals[r][0]);
       if (d && !isNaN(d.getTime()) && Utilities.formatDate(d, tz, 'yyyy-MM-dd') === dateKey) {
         targetRowIdx = r;
         break;
@@ -259,11 +259,11 @@ function getEntryForEdit(payload) {
     }
     if (targetRowIdx === -1) return { success: false, error: 'Date not found in column A of "' + payload.sheetName + '".' };
 
-    // Read the 6-column block
-    var rowVals = allValues[targetRowIdx];
-    var startVal = rowVals[empCol - 1];
-    var endVal = rowVals[empCol];
-    var jobOrder = rowVals[empCol + 5 - 1] ? String(rowVals[empCol + 5 - 1]).trim() : '';
+    // Read just the 6-column block
+    var blockVals = sheet.getRange(CONFIG.DATA_START_ROW + targetRowIdx, empCol, 1, CONFIG.COLS_PER_EMPLOYEE).getValues()[0];
+    var startVal = blockVals[0];
+    var endVal = blockVals[1];
+    var jobOrder = blockVals[5] ? String(blockVals[5]).trim() : '';
 
     var exists = !!(startVal && endVal);
     var startTime = exists ? formatTimeCell(startVal, tz) : '';
@@ -343,6 +343,65 @@ function updateTimeEntry(formData) {
 function coreProcessEntries(sheet, rawEntries, flags) {
   flags = flags || {};
 
+  // Take the document lock BEFORE the bulk read so the overwrite check, the
+  // undo snapshot, and the write itself all see one consistent view — two
+  // concurrent saves can't validate against the same stale snapshot and
+  // silently clobber each other.
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) {
+    throw new Error('The sheet is busy right now (another save may be in progress). Wait a few seconds and try again — nothing was written.');
+  }
+  let out;
+  try {
+    out = coreValidateAndWrite_(sheet, rawEntries, flags);
+  } finally {
+    lock.releaseLock();
+  }
+  if (out.needsConfirmation) return out;
+
+  invalidateTimesheetScanCache_();
+  saveUndoData(sheet.getName(), out.undoEntries, flags.actorEmail);
+
+  const tzOut = Session.getScriptTimeZone();
+  const auditAction = flags.isEdit ? 'edit' : 'write';
+  const auditRows = out.validated.map(function (entry) {
+    return {
+      action: auditAction,
+      sheetName: sheet.getName(),
+      targetRow: entry.targetRow,
+      employee: entry.employeeName,
+      details: Utilities.formatDate(entry.startTime, tzOut, 'HH:mm') + '-' +
+        Utilities.formatDate(entry.endTime, tzOut, 'HH:mm') + ' ' + (entry.jobOrder || '')
+    };
+  });
+  logAuditBatch(auditRows, flags.actorEmail);
+
+  // Create an in-app notification for the actor
+  try {
+    const entrySummary = out.validated.map(function (e) {
+      return e.employeeName + ' ' + Utilities.formatDate(e.startTime, tzOut, 'HH:mm') +
+        '-' + Utilities.formatDate(e.endTime, tzOut, 'HH:mm') +
+        (e.jobOrder ? ' (' + e.jobOrder + ')' : '');
+    }).join('; ');
+    const actionVerb = flags.isEdit ? 'Updated' : 'Saved';
+    createNotification(flags.actorEmail,
+      actionVerb + ' ' + out.validated.length + ' entr' + (out.validated.length === 1 ? 'y' : 'ies') +
+      ' (' + out.totalHoursSum.toFixed(1) + ' hrs) on ' + sheet.getName() + ': ' + entrySummary,
+      'timesheet_approved', '');
+  } catch (notifErr) {
+    Logger.log('Failed to create notification: ' + notifErr);
+  }
+
+  const resultVerb = flags.isEdit ? 'Updated' : 'Saved';
+  return {
+    success: true,
+    message: resultVerb + ' ' + out.validated.length + ' entr' + (out.validated.length === 1 ? 'y' : 'ies') +
+      ' (' + out.totalHoursSum.toFixed(1) + ' hrs total) on "' + sheet.getName() + '".'
+  };
+}
+
+/** Bulk read + validation + batched write. Runs entirely under the document lock. */
+function coreValidateAndWrite_(sheet, rawEntries, flags) {
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
   if (lastRow < CONFIG.DATA_START_ROW) {
@@ -512,59 +571,49 @@ function coreProcessEntries(sheet, rawEntries, flags) {
     };
   }
 
-  // ---- Write under a document lock ----
-  const lock = LockService.getDocumentLock();
-  if (!lock.tryLock(10000)) {
-    throw new Error('The sheet is busy right now (another save may be in progress). Wait a few seconds and try again — nothing was written.');
-  }
-  var undoEntries = [];
-  try {
-    validated.forEach(function (entry) {
-      var prevValues = allValues[entry.targetRow - 1].slice(entry.employeeColumn - 1, entry.employeeColumn - 1 + CONFIG.COLS_PER_EMPLOYEE);
-      undoEntries.push({ targetRow: entry.targetRow, employeeColumn: entry.employeeColumn, prevValues: prevValues });
-      writeFormulaRow(sheet, entry.targetRow, entry.employeeColumn, entry.startTime, entry.endTime, entry.jobOrder);
-    });
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
-  invalidateTimesheetScanCache_();
-
-  saveUndoData(sheet.getName(), undoEntries);
-  var auditAction = flags.isEdit ? 'edit' : 'write';
+  // ---- Batched write (document lock already held by coreProcessEntries) ----
+  const undoEntries = [];
+  const timeFmt = [], hourFmt = [], textFmt = [], centered = [], leftAligned = [];
   validated.forEach(function (entry) {
-    logAudit(auditAction, sheet.getName(), entry.targetRow, entry.employeeName,
-      entry.startTime + '-' + entry.endTime + ' ' + (entry.jobOrder || ''), flags.actorEmail);
+    const row = entry.targetRow, col = entry.employeeColumn;
+    undoEntries.push({
+      targetRow: row,
+      employeeColumn: col,
+      prevValues: allValues[row - 1].slice(col - 1, col - 1 + CONFIG.COLS_PER_EMPLOYEE)
+    });
+    const f = buildHourFormulas(row, col);
+    sheet.getRange(row, col, 1, CONFIG.COLS_PER_EMPLOYEE)
+      .setValues([[entry.startTime, entry.endTime, f.total, f.normal, f.ot, entry.jobOrder]]);
+    timeFmt.push(getColumnLetter(col) + row + ':' + getColumnLetter(col + 1) + row);
+    hourFmt.push(getColumnLetter(col + 2) + row + ':' + getColumnLetter(col + 4) + row);
+    textFmt.push(getColumnLetter(col + 5) + row);
+    centered.push(getColumnLetter(col) + row + ':' + getColumnLetter(col + 4) + row);
+    leftAligned.push(getColumnLetter(col + 5) + row);
+  });
+  // Force consistent formats/alignment every save so a stray manual edit
+  // (e.g. cell set to Text/General) can't throw off how times/durations
+  // render or sum — one RangeList call per format instead of five getRange
+  // calls per entry.
+  sheet.getRangeList(timeFmt).setNumberFormat('h:mm AM/PM');
+  sheet.getRangeList(hourFmt).setNumberFormat('[h]:mm');
+  sheet.getRangeList(textFmt).setNumberFormat('@');
+  sheet.getRangeList(centered).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  sheet.getRangeList(leftAligned).setHorizontalAlignment('left').setVerticalAlignment('middle');
+  SpreadsheetApp.flush();
+
+  // Snapshot what the write actually produced (computed formula results
+  // included) so undo can verify nothing changed underneath it before restoring.
+  undoEntries.forEach(function (u) {
+    u.writtenValues = sheet.getRange(u.targetRow, u.employeeColumn, 1, CONFIG.COLS_PER_EMPLOYEE).getValues()[0];
   });
 
-  // Create an in-app notification for the actor
-  try {
-    var entrySummary = validated.map(function (e) {
-      return e.employeeName + ' ' + Utilities.formatDate(e.startTime, Session.getScriptTimeZone(), 'HH:mm') +
-        '-' + Utilities.formatDate(e.endTime, Session.getScriptTimeZone(), 'HH:mm') +
-        (e.jobOrder ? ' (' + e.jobOrder + ')' : '');
-    }).join('; ');
-    var actionVerb = flags.isEdit ? 'Updated' : 'Saved';
-    createNotification(flags.actorEmail,
-      actionVerb + ' ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +
-      ' (' + totalHoursSum.toFixed(1) + ' hrs) on ' + sheet.getName() + ': ' + entrySummary,
-      'timesheet_approved', '');
-  } catch (notifErr) {
-    Logger.log('Failed to create notification: ' + notifErr);
-  }
-
-  var resultVerb = flags.isEdit ? 'Updated' : 'Saved';
-  return {
-    success: true,
-    message: resultVerb + ' ' + validated.length + ' entr' + (validated.length === 1 ? 'y' : 'ies') +
-      ' (' + totalHoursSum.toFixed(1) + ' hrs total) on "' + sheet.getName() + '".'
-  };
+  return { validated: validated, undoEntries: undoEntries, totalHoursSum: totalHoursSum };
 }
 
 /**
  * Builds the TOTAL/NORMAL/OT formulas for one employee's daily row.
- * Shared by writeFormulaRow (on save) and onEdit (auto-revert guard in
- * Guard.gs) so the two can't drift out of sync.
+ * Shared by the save write in coreValidateAndWrite_ and onEdit (auto-revert
+ * guard in Guard.gs) so the two can't drift out of sync.
  */
 function buildHourFormulas(targetRow, col) {
   var dateCell = getColumnLetter(CONFIG.DATE_COL) + targetRow;
@@ -581,29 +630,9 @@ function buildHourFormulas(targetRow, col) {
 
   return {
     total: '=IF(OR(ISBLANK(' + startCell + '), ISBLANK(' + endCell + ')), "", ' + endCell + '-' + startCell + ' + IF(' + endCell + '<' + startCell + ', 1, 0))',
-    normal: '=IF(' + totalCell + '="", "", IF(' + isRestDay + ', 0, MIN(TIME(8,0,0), ' + totalCell + ')))',
+    normal: '=IF(' + totalCell + '="", "", IF(' + isRestDay + ', 0, MIN(TIME(' + CONFIG.NORMAL_HOURS_PER_DAY + ',0,0), ' + totalCell + ')))',
     ot: '=IF(' + totalCell + '="", "", IF(' + isRestDay + ', ' + totalCell + ', ' + totalCell + '-' + normalCell + '))'
   };
-}
-
-/**
- * Universal Formula Writer for a single employee block.
- */
-function writeFormulaRow(sheet, targetRow, col, start, end, jobOrder) {
-  var f = buildHourFormulas(targetRow, col);
-  var rowValues = [start, end, f.total, f.normal, f.ot, jobOrder];
-  sheet.getRange(targetRow, col, 1, CONFIG.COLS_PER_EMPLOYEE).setValues([rowValues]);
-  // Force consistent formats every save so a stray manual edit (e.g. cell set to
-  // Text/General) upstream can't throw off how times/durations render or sum.
-  sheet.getRange(targetRow, col, 1, 2).setNumberFormat('h:mm AM/PM');
-  sheet.getRange(targetRow, col + 2, 1, 3).setNumberFormat('[h]:mm');
-  sheet.getRange(targetRow, col + 5, 1, 1).setNumberFormat('@');
-  // Force consistent alignment every save so a stray manual edit can't leave
-  // the row visually misaligned: time/hours columns centered both ways,
-  // job order left-aligned horizontally (it's text, reads better left) but
-  // still vertically centered like the rest of the row.
-  sheet.getRange(targetRow, col, 1, 5).setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sheet.getRange(targetRow, col + 5, 1, 1).setHorizontalAlignment('left').setVerticalAlignment('middle');
 }
 
 /**
@@ -700,16 +729,6 @@ function resolveNumericMonthYear(a, b) {
 // ---------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------
-
-/**
- * Neutralizes leading =, +, -, @ so free-text saved into a cell can never be
- * interpreted as a formula (formula/DDE injection via job order text, which
- * later also flows into the Excel export).
- */
-function sanitizeSheetText(v) {
-  const s = String(v == null ? '' : v);
-  return /^[=+\-@]/.test(s) ? "'" + s : s;
-}
 
 /**
  * Makes an employee name safe as an Excel/Sheets tab name (Excel's 31-char

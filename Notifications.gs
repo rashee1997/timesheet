@@ -1,19 +1,17 @@
 /**
  * Notifications.gs
  * Manages notification creation, retrieval, and status updates.
+ * (sanitizeSheetText lives in Shared.gs — one canonical copy.)
  */
 
 // Define the name of the sheet where notifications will be stored
 const NOTIFICATIONS_SHEET_NAME = "Notifications";
 
-/**
- * Neutralizes leading =, +, -, @ so free-text saved into a cell can never be
- * interpreted as a formula (formula/DDE injection protection).
- */
-function sanitizeSheetText(v) {
-  const s = String(v == null ? '' : v);
-  return /^[=+\-@]/.test(s) ? "'" + s : s;
-}
+// Only the tail of the sheet is ever scanned — the sheet grows forever, and
+// reading the whole thing on every poll gets linearly slower over time.
+const NOTIFICATIONS_MAX_SCAN_ROWS = 500;
+
+const NOTIFICATION_COLS = { ID: 0, RECIPIENT: 1, MESSAGE: 2, TYPE: 3, LINK: 4, TIMESTAMP: 5, READ: 6 };
 
 /**
  * Ensures the 'Notifications' sheet exists with the correct headers.
@@ -51,45 +49,47 @@ function createNotification(recipientEmail, message, type, link = "") {
   return { id, recipientEmail, message, type, link, timestamp, read: false };
 }
 
+/** Reads only the last NOTIFICATIONS_MAX_SCAN_ROWS data rows. */
+function readNotificationTail_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { rows: [], firstSheetRow: 2 };
+  const firstSheetRow = Math.max(2, lastRow - NOTIFICATIONS_MAX_SCAN_ROWS + 1);
+  const rows = sheet.getRange(firstSheetRow, 1, lastRow - firstSheetRow + 1, 7).getValues();
+  return { rows: rows, firstSheetRow: firstSheetRow };
+}
+
 /**
- * Retrieves notifications for a given user.
+ * Retrieves notifications for a given user (most recent NOTIFICATIONS_MAX_SCAN_ROWS only).
  * @param {string} userEmail The email of the user whose notifications to retrieve.
  * @param {boolean} [includeRead=false] Whether to include read notifications (defaults to unread only).
  * @returns {Array<object>} An array of notification objects.
  */
 function getNotifications(userEmail, includeRead = false) {
   const sheet = getOrCreateNotificationsSheet();
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return []; // No headers or data
-
-  const headers = data[0];
+  const tail = readNotificationTail_(sheet);
   const notifications = [];
 
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const recipientEmail = row[headers.indexOf("RecipientEmail")];
-
-    if (recipientEmail === userEmail) {
-      const isRead = row[headers.indexOf("Read")];
-      if (includeRead || !isRead) {
-        notifications.push({
-          id: row[headers.indexOf("ID")],
-          recipientEmail: recipientEmail,
-          message: row[headers.indexOf("Message")],
-          type: row[headers.indexOf("Type")],
-          link: row[headers.indexOf("Link")],
-          timestamp: row[headers.indexOf("Timestamp")],
-          read: isRead,
-          rowIndex: i + 1 // Store row index for easy updating
-        });
-      }
-    }
-  }
+  tail.rows.forEach(function (row, i) {
+    if (row[NOTIFICATION_COLS.RECIPIENT] !== userEmail) return;
+    const isRead = row[NOTIFICATION_COLS.READ];
+    if (!includeRead && isRead) return;
+    notifications.push({
+      id: row[NOTIFICATION_COLS.ID],
+      recipientEmail: row[NOTIFICATION_COLS.RECIPIENT],
+      message: row[NOTIFICATION_COLS.MESSAGE],
+      type: row[NOTIFICATION_COLS.TYPE],
+      link: row[NOTIFICATION_COLS.LINK],
+      timestamp: row[NOTIFICATION_COLS.TIMESTAMP],
+      read: isRead,
+      rowIndex: tail.firstSheetRow + i
+    });
+  });
   return notifications;
 }
 
 /**
- * Marks a list of notifications as read.
+ * Marks a list of notifications as read. Writes are batched into contiguous
+ * runs instead of one setValue per row.
  * @param {Array<string>} notificationIds An array of notification IDs to mark as read.
  * @returns {object} An object indicating success and count of updated notifications.
  */
@@ -99,48 +99,41 @@ function markNotificationsAsRead(notificationIds) {
   }
 
   const sheet = getOrCreateNotificationsSheet();
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return { success: false, message: "No notifications found." };
+  const tail = readNotificationTail_(sheet);
+  if (tail.rows.length === 0) return { success: false, message: "No notifications found." };
 
-  const headers = data[0];
-  const idColIndex = headers.indexOf("ID");
-  const readColIndex = headers.indexOf("Read");
-  let updatedCount = 0;
+  const wanted = {};
+  notificationIds.forEach(function (id) { wanted[id] = true; });
 
-  for (let i = 1; i < data.length; i++) {
-    const notificationId = data[i][idColIndex];
-    if (notificationIds.includes(notificationId)) {
-      if (data[i][readColIndex] === false) { // Only update if not already read
-        sheet.getRange(i + 1, readColIndex + 1).setValue(true);
-        updatedCount++;
-      }
+  const targetRows = [];
+  tail.rows.forEach(function (row, i) {
+    if (wanted[row[NOTIFICATION_COLS.ID]] && row[NOTIFICATION_COLS.READ] === false) {
+      targetRows.push(tail.firstSheetRow + i);
     }
-  }
+  });
+
+  // Group contiguous sheet rows into single setValues writes.
+  let updatedCount = 0;
+  let runStart = -1, runLen = 0;
+  const flushRun = function () {
+    if (runLen === 0) return;
+    const values = [];
+    for (let k = 0; k < runLen; k++) values.push([true]);
+    sheet.getRange(runStart, NOTIFICATION_COLS.READ + 1, runLen, 1).setValues(values);
+    updatedCount += runLen;
+    runStart = -1;
+    runLen = 0;
+  };
+  targetRows.forEach(function (rowNum) {
+    if (runLen > 0 && rowNum === runStart + runLen) {
+      runLen++;
+    } else {
+      flushRun();
+      runStart = rowNum;
+      runLen = 1;
+    }
+  });
+  flushRun();
+
   return { success: true, updatedCount: updatedCount };
-}
-
-// Example usage (for testing within Apps Script editor)
-function testNotifications() {
-  const user = Session.getActiveUser().getEmail(); // Get current user's email
-  Logger.log(`Current user: ${user}`);
-
-  // Create some notifications
-  createNotification(user, "Reminder: Please submit your timesheet for the last week.", "reminder");
-  createNotification("another@example.com", "This is for another user.", "info");
-
-  // Get unread notifications
-  const unread = getNotifications(user);
-  Logger.log("Unread notifications:");
-  unread.forEach(n => Logger.log(JSON.stringify(n)));
-
-  // Mark one as read
-  if (unread.length > 0) {
-    markNotificationsAsRead([unread[0].id]);
-    Logger.log(`Marked notification ID ${unread[0].id} as read.`);
-  }
-
-  // Get all notifications (including read)
-  const all = getNotifications(user, true);
-  Logger.log("All notifications (including read):");
-  all.forEach(n => Logger.log(JSON.stringify(n)));
 }

@@ -52,30 +52,42 @@ function buildReportExcel(report, entries) {
   entries = entries || [];
   var info = getCompanyInfo();
   var ss = SpreadsheetApp.create('Timesheet_Report_' + Date.now());
-  var usedNames = { 'Summary': true };
+  try {
+    var usedNames = { 'Summary': true };
 
-  var summarySheet = ss.getSheets()[0].setName('Summary');
-  buildSummaryTab_(summarySheet, info, report);
+    var summarySheet = ss.getSheets()[0].setName('Summary');
+    buildSummaryTab_(summarySheet, info, report);
 
-  report.rows.forEach(function (row) {
-    var empSheet = ss.insertSheet(sanitizeSheetName(row.name, usedNames));
-    var key = normalizeNameKey(row.name);
-    var empEntries = entries.filter(function (e) { return e.employeeKey === key; });
-    buildEmployeeTab_(empSheet, row, empEntries, report);
-  });
+    report.rows.forEach(function (row) {
+      var empSheet = ss.insertSheet(sanitizeSheetName(row.name, usedNames));
+      var key = normalizeNameKey(row.name);
+      var empEntries = entries.filter(function (e) { return e.employeeKey === key; });
+      buildEmployeeTab_(empSheet, row, empEntries, report);
+    });
 
-  SpreadsheetApp.flush();
+    SpreadsheetApp.flush();
 
-  var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx';
-  var response = UrlFetchApp.fetch(url, {
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
-  });
-  var safeStart = report.startDate.replace(/[/]/g, '-');
-  var safeEnd = report.endDate.replace(/[/]/g, '-');
-  var blob = response.getBlob().setName('Timesheet_Report_' + safeStart + '_to_' + safeEnd + '.xlsx');
-
-  DriveApp.getFileById(ss.getId()).setTrashed(true);
-  return [blob];
+    var url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx';
+    var response = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) {
+      throw new Error('Excel export failed (HTTP ' + response.getResponseCode() + ').');
+    }
+    var safeStart = report.startDate.replace(/[/]/g, '-');
+    var safeEnd = report.endDate.replace(/[/]/g, '-');
+    var blob = response.getBlob().setName('Timesheet_Report_' + safeStart + '_to_' + safeEnd + '.xlsx');
+    return [blob];
+  } finally {
+    // Always trash the temp spreadsheet, even when the export fetch throws —
+    // otherwise orphaned Timesheet_Report_* files pile up in Drive.
+    try {
+      DriveApp.getFileById(ss.getId()).setTrashed(true);
+    } catch (trashErr) {
+      Logger.log('buildReportExcel: failed to trash temp spreadsheet: ' + trashErr);
+    }
+  }
 }
 
 function buildSummaryTab_(sheet, info, report) {
@@ -85,8 +97,9 @@ function buildSummaryTab_(sheet, info, report) {
   var totalHours = normalHours + otHours;
   var otShare = totalHours > 0 ? (otHours / totalHours) * 100 : 0;
 
-  // Set Century Gothic as the default font for the entire sheet
-  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setFontFamily(DEFAULT_FONT);
+  // Default font for the used area only (header rows + table + pie source) —
+  // formatting the whole ~26k-cell grid is a large, pointless API call.
+  sheet.getRange(1, 1, 6 + report.rows.length + 4, 9).setFontFamily(DEFAULT_FONT);
 
   sheet.getRange(1, 1, 1, COLS).merge().setValue(info.name)
     .setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
@@ -200,8 +213,9 @@ function buildEmployeeTab_(sheet, row, empEntries, report) {
   var COLS = 8;
   var tz = Session.getScriptTimeZone();
 
-  // Set Century Gothic as the default font for the entire sheet
-  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setFontFamily(DEFAULT_FONT);
+  // Default font for the used area only (header rows + table + totals) —
+  // formatting the whole ~26k-cell grid is a large, pointless API call.
+  sheet.getRange(1, 1, 4 + empEntries.length + 3, COLS).setFontFamily(DEFAULT_FONT);
 
   sheet.getRange(1, 1, 1, COLS).merge().setValue(row.name)
     .setFontSize(14).setFontWeight('bold').setHorizontalAlignment('center');

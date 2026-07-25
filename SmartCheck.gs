@@ -45,6 +45,7 @@ function smartCheckEntries(payload) {
     var jobOrders = getJobOrderSuggestions().slice(0, 20);
     var tz = Session.getScriptTimeZone();
     var now = new Date();
+    var restDayNames = getRestDayNames().join('/');
 
     var prompt = [
       'You are a timesheet validation assistant. Return ONLY valid JSON.',
@@ -53,13 +54,14 @@ function smartCheckEntries(payload) {
       '- Today: ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd') + ' (' + Utilities.formatDate(now, tz, 'EEEE') + ')',
       '- Sheet: "' + sheetName + '"',
       '- Known job orders: ' + JSON.stringify(jobOrders),
+      '- Rest days: ' + restDayNames,
       '',
       'ENTRIES:',
       JSON.stringify(enriched, null, 2),
       '',
       'Check for these anomalies:',
       '- long_shift: shift > 14 hours (high severity)',
-      '- weekend: Friday entry (rest day in Qatar) (medium severity)',
+      '- weekend: entry on a rest day (' + restDayNames + ') (medium severity)',
       '- missing_job: employee has no job order while others on same day do (low severity)',
       '- duplicate_pattern: same employee+hours+job order across 3+ days (low severity)',
       '- anomaly: any other suspicious pattern (severity as appropriate)',

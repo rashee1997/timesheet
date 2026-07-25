@@ -91,6 +91,7 @@ function scanTimesheetEntries_(startDate, endDate) {
   var endStr = Utilities.formatDate(endDate, tz, 'yyyy-MM-dd');
   var startKey = startDate.getFullYear() * 12 + startDate.getMonth();
   var endKey = endDate.getFullYear() * 12 + endDate.getMonth();
+  var jsRestDays = getRestDaysJs();
 
   var entries = [];
   var skippedSheets = [];
@@ -144,7 +145,7 @@ function scanTimesheetEntries_(startDate, endDate) {
           if (!totalHours || totalHours <= 0) return;
 
           var normalHours, otHours;
-          if (rowDate.getDay() === 5) { // Friday = rest day, all OT
+          if (jsRestDays.indexOf(rowDate.getDay()) !== -1) { // configured rest day, all OT
             normalHours = 0;
             otHours = totalHours;
           } else {

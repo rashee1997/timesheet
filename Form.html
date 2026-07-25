@@ -494,7 +494,7 @@
       <!-- SINGLE MODE -->
       <div id="singleFields">
         <div class="field">
-          <label for="date">Date <span id="fridayBadge" style="display:none;color:#92400e;background:#fffbeb;border:1px solid #f59e0b;border-radius:10px;padding:0 7px;font-size:9px;font-weight:700;text-transform:none;letter-spacing:0;margin-left:6px;">FRI = 100% OT</span></label>
+          <label for="date">Date <span id="restDayBadge" style="display:none;color:#92400e;background:#fffbeb;border:1px solid #f59e0b;border-radius:10px;padding:0 7px;font-size:9px;font-weight:700;text-transform:none;letter-spacing:0;margin-left:6px;">FRI = 100% OT</span></label>
           <input type="date" id="date">
         </div>
 
@@ -591,9 +591,26 @@
     let aiCancelled = false;
 
     let currentMode = 'single';
-    let ALL_EMPLOYEES = []; 
+    let ALL_EMPLOYEES = [];
     let dateGroupCount = 0;
     let pendingConfirmType = null;
+    let REST_DAYS_JS = [5]; // JS day numbers (0=Sun..6=Sat), default Friday
+    const REST_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // Fetch configured rest days from server
+    google.script.run
+      .withSuccessHandler(function (days) {
+        REST_DAYS_JS = Array.isArray(days) ? days : [5];
+        // Update badge text with actual rest day names
+        var badge = document.getElementById('restDayBadge');
+        if (badge) {
+          var names = REST_DAYS_JS.map(function (d) { return REST_DAY_NAMES[d]; });
+          badge.textContent = names.join('/') + ' = 100% OT';
+          // Re-evaluate badge visibility with new rest days
+          badge.style.display = isRestDayDate(dateInput.value) ? 'inline' : 'none';
+        }
+      })
+      .getRestDaysJs();
 
     // --- Edit mode state ---
     let editMode = false;
@@ -605,8 +622,8 @@
     const today = new Date();
     dateInput.value = today.toISOString().slice(0, 10);
     (function () {
-      var badge = document.getElementById('fridayBadge');
-      if (badge) badge.style.display = isFridayDate(dateInput.value) ? 'inline' : 'none';
+      var badge = document.getElementById('restDayBadge');
+      if (badge) badge.style.display = isRestDayDate(dateInput.value) ? 'inline' : 'none';
     })();
 
     // --- Dynamic Preview Calculations ---
@@ -632,20 +649,20 @@
       return { totalHours, overnight };
     }
 
-    function splitNormalOt(totalHours, isFriday) {
-      if (isFriday) {
-        return { normal: 0, ot: totalHours, isFridayOvertime: true };
+    function splitNormalOt(totalHours, isRestDay) {
+      if (isRestDay) {
+        return { normal: 0, ot: totalHours, isRestDayOvertime: true };
       } else {
         const normal = Math.min(8, totalHours);
         const ot = Math.max(0, totalHours - 8);
-        return { normal, ot, isFridayOvertime: false };
+        return { normal, ot, isRestDayOvertime: false };
       }
     }
 
-    function isFridayDate(dateStr) {
+    function isRestDayDate(dateStr) {
       if (!dateStr) return false;
       const d = new Date(dateStr + 'T00:00:00');
-      return d.getDay() === 5; // Friday is 5
+      return REST_DAYS_JS.indexOf(d.getDay()) !== -1;
     }
 
     function renderHoursPreview(container, dateVal, startTime, endTime) {
@@ -655,17 +672,18 @@
         container.innerHTML = '';
         return;
       }
-      
-      const isFriday = isFridayDate(dateVal);
-      const splits = splitNormalOt(hoursData.totalHours, isFriday);
-      
+
+      const isRest = isRestDayDate(dateVal);
+      const splits = splitNormalOt(hoursData.totalHours, isRest);
+
       let html = `
         <div style="font-size: 11.5px; background: var(--accent-tint); color: var(--accent-dark); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 10px; margin-top: 5px;">
           <strong>Preview:</strong> <span>${hoursData.totalHours.toFixed(2)} hrs total</span>
       `;
-      
-      if (splits.isFridayOvertime) {
-        html += ` | <span style="color: #92400e; font-weight: bold;">Friday Rest Day (100% OT): ${splits.ot.toFixed(2)} hrs OT</span>`;
+
+      if (splits.isRestDayOvertime) {
+        var restNames = REST_DAYS_JS.map(function (d) { return REST_DAY_NAMES[d]; });
+        html += ` | <span style="color: #92400e; font-weight: bold;">Rest Day (100% OT): ${splits.ot.toFixed(2)} hrs OT</span>`;
       } else {
         html += ` | <span>Normal: ${splits.normal.toFixed(2)} hrs</span> | <span>OT: ${splits.ot.toFixed(2)} hrs</span>`;
       }
@@ -674,8 +692,9 @@
         html += `<div style="margin-top: 3px; font-weight: bold; color: var(--error);">🌙 Overnight Shift (crosses midnight)</div>`;
       }
       
-      if (splits.isFridayOvertime) {
-        html += `<div style="margin-top: 3px; font-size: 10px; color: var(--muted);">ℹ️ Friday counts as overtime in report calculations.</div>`;
+      if (splits.isRestDayOvertime) {
+        var restNames = REST_DAYS_JS.map(function (d) { return REST_DAY_NAMES[d]; });
+        html += `<div style="margin-top: 3px; font-size: 10px; color: var(--muted);">ℹ️ ${restNames.join('/')} counts as overtime in report calculations.</div>`;
       }
       
       html += `</div>`;
@@ -758,8 +777,8 @@
 
     dateInput.addEventListener('change', function () {
       updateSinglePreview();
-      var badge = document.getElementById('fridayBadge');
-      if (badge) badge.style.display = isFridayDate(dateInput.value) ? 'inline' : 'none';
+      var badge = document.getElementById('restDayBadge');
+      if (badge) badge.style.display = isRestDayDate(dateInput.value) ? 'inline' : 'none';
     });
     startInput.addEventListener('change', updateSinglePreview);
     endInput.addEventListener('change', updateSinglePreview);
@@ -1652,7 +1671,7 @@
         const emp = ALL_EMPLOYEES.find(x => x.column === e.column || x.column === e.employeeColumn);
         const name = emp ? emp.name : ('Col ' + (e.column || e.employeeColumn));
         const hoursData = computeClientHours(e.startTime, e.endTime);
-        const splits = hoursData ? splitNormalOt(hoursData.totalHours, isFridayDate(e.date)) : { ot: 0 };
+        const splits = hoursData ? splitNormalOt(hoursData.totalHours, isRestDayDate(e.date)) : { ot: 0 };
         return '<tr>' +
           '<td style="padding:4px 8px;">' + escapeHtml(name) + '</td>' +
           '<td style="padding:4px 8px;">' + escapeHtml(e.date) + '</td>' +
@@ -1817,8 +1836,8 @@
 
       var todayStr = new Date().toISOString().slice(0, 10);
       dateInput.value = todayStr;
-      var badge = document.getElementById('fridayBadge');
-      if (badge) badge.style.display = isFridayDate(todayStr) ? 'inline' : 'none';
+      var badge = document.getElementById('restDayBadge');
+      if (badge) badge.style.display = isRestDayDate(todayStr) ? 'inline' : 'none';
       startInput.value = '';
       endInput.value = '';
       jobOrderInput.value = '';
@@ -1966,8 +1985,8 @@
       jobOrderInput.value = '';
       if (singleSelector) singleSelector.clear();
       document.getElementById('singlePreviewContainer').innerHTML = '';
-      var badge = document.getElementById('fridayBadge');
-      if (badge) badge.style.display = isFridayDate(today) ? 'inline' : 'none';
+      var badge = document.getElementById('restDayBadge');
+      if (badge) badge.style.display = isRestDayDate(today) ? 'inline' : 'none';
     });
 
     /**
@@ -1993,8 +2012,8 @@
 
           // Pre-fill form fields
           dateInput.value = entry.date;
-          var badge = document.getElementById('fridayBadge');
-          if (badge) badge.style.display = isFridayDate(entry.date) ? 'inline' : 'none';
+          var badge = document.getElementById('restDayBadge');
+          if (badge) badge.style.display = isRestDayDate(entry.date) ? 'inline' : 'none';
           startInput.value = entry.startTime;
           endInput.value = entry.endTime;
           jobOrderInput.value = entry.jobOrder;

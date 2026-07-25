@@ -1,125 +1,319 @@
 <div id="companySettingsOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:12px;max-width:420px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.2);overflow:hidden;">
-    <div style="padding:18px 20px 12px;border-bottom:1px solid var(--border);">
-      <strong style="font-size:14px;color:var(--text);">🏢 Company Settings</strong>
+  <div style="background:var(--card);border-radius:12px;max-width:500px;width:95%;max-height:85vh;box-shadow:0 8px 30px rgba(0,0,0,0.2);overflow:hidden;display:flex;flex-direction:column;">
+    <div style="padding:18px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <strong style="font-size:14px;color:var(--text);">Settings</strong>
+      <button type="button" id="settingsCloseBtn" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted);padding:0 4px;">&times;</button>
     </div>
-    <form id="companySettingsForm" style="padding:16px 20px;">
-      <div class="field" style="margin-bottom:14px;">
-        <label for="companyNameInput" style="display:block;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;">Company Name</label>
-        <input type="text" id="companyNameInput" style="width:100%;padding:8px 10px;font-size:13px;border:1.5px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);">
+
+    <!-- Tab bar -->
+    <div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg);">
+      <button type="button" class="settings-tab active" data-tab="company" style="flex:1;padding:10px 8px;font-size:11.5px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid var(--accent);">Company</button>
+      <button type="button" class="settings-tab" data-tab="restdays" style="flex:1;padding:10px 8px;font-size:11.5px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;">Rest Days</button>
+      <button type="button" class="settings-tab" data-tab="emails" style="flex:1;padding:10px 8px;font-size:11.5px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;">Employee Emails</button>
+    </div>
+
+    <div style="overflow-y:auto;flex:1;padding:16px 20px;">
+
+      <!-- Tab 1: Company -->
+      <div id="tabCompany" class="settings-tab-panel">
+        <form id="companySettingsForm">
+          <div class="field" style="margin-bottom:14px;">
+            <label for="companyNameInput" style="display:block;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;">Company Name</label>
+            <input type="text" id="companyNameInput" style="width:100%;padding:8px 10px;font-size:13px;border:1.5px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);">
+          </div>
+          <div class="field" style="margin-bottom:14px;">
+            <label for="logoUpload" style="display:block;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;">Company Logo</label>
+            <input type="file" id="logoUpload" name="logo" accept="image/*" style="font-size:12px;color:var(--text);">
+            <div id="logoPreview" style="margin-top:8px;max-width:150px;max-height:60px;display:none;"></div>
+            <button type="button" id="removeLogoBtn" style="display:none;margin-top:6px;background:none;border:1px solid var(--error);color:var(--error);border-radius:4px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;">Remove Logo</button>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button type="submit" id="companySettingsSave" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">Save</button>
+          </div>
+        </form>
       </div>
-      <div class="field" style="margin-bottom:14px;">
-        <label for="logoUpload" style="display:block;font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;">Company Logo</label>
-        <input type="file" id="logoUpload" name="logo" accept="image/*" style="font-size:12px;color:var(--text);">
-        <div id="logoPreview" style="margin-top:8px;max-width:150px;max-height:60px;display:none;"></div>
-        <button type="button" id="removeLogoBtn" style="display:none;margin-top:6px;background:none;border:1px solid var(--error);color:var(--error);border-radius:4px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;">Remove Logo</button>
+
+      <!-- Tab 2: Rest Days -->
+      <div id="tabRestDays" class="settings-tab-panel" style="display:none;">
+        <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px;">Select which day(s) are rest days. Hours worked on rest days count as 100% overtime.</p>
+        <div id="restDaysGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button type="button" id="saveRestDaysBtn" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">Save</button>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;">
-        <button type="button" id="companySettingsCancel" style="background:#f1f1f0;color:var(--text);border:none;border-radius:6px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">Cancel</button>
-        <button type="submit" id="companySettingsSave" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">Save</button>
+
+      <!-- Tab 3: Employee Emails -->
+      <div id="tabEmails" class="settings-tab-panel" style="display:none;">
+        <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px;">Map employee names (from timesheets) to email addresses for per-employee report delivery.</p>
+        <div id="employeeEmailList" style="max-height:300px;overflow-y:auto;margin-bottom:16px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button type="button" id="saveEmployeeEmailsBtn" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">Save</button>
+        </div>
       </div>
-    </form>
+
+    </div>
   </div>
 </div>
 <script>
-function openCompanySettings() {
-  var overlay = document.getElementById('companySettingsOverlay');
-  overlay.style.display = 'flex';
+(function () {
+  var DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  google.script.run
-    .withSuccessHandler(function (info) {
-      document.getElementById('companyNameInput').value = info.name || 'United Ocean Trading and Services';
-      if (info.logoUrl) {
-        var preview = document.getElementById('logoPreview');
-        preview.innerHTML = '<img src="' + info.logoUrl + '" style="max-width:150px;max-height:60px;">';
-        preview.style.display = 'block';
-        document.getElementById('removeLogoBtn').style.display = '';
-      } else {
-        document.getElementById('logoPreview').style.display = 'none';
-        document.getElementById('removeLogoBtn').style.display = 'none';
-      }
-    })
-    .getCompanyInfo();
-}
+  // --- Tab switching ---
+  document.querySelectorAll('.settings-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      document.querySelectorAll('.settings-tab').forEach(function (t) {
+        t.classList.remove('active');
+        t.style.borderBottomColor = 'transparent';
+        t.style.color = 'var(--muted)';
+      });
+      this.classList.add('active');
+      this.style.borderBottomColor = 'var(--accent)';
+      this.style.color = 'var(--text)';
 
-document.getElementById('companySettingsForm').addEventListener('submit', function (e) {
-  e.preventDefault();
-  var btn = document.getElementById('companySettingsSave');
-  btn.disabled = true;
-  btn.textContent = 'Saving…';
+      document.querySelectorAll('.settings-tab-panel').forEach(function (p) { p.style.display = 'none'; });
+      var target = this.getAttribute('data-tab');
+      var panel = document.getElementById('tab' + target.charAt(0).toUpperCase() + target.slice(1));
+      if (panel) panel.style.display = 'block';
 
-  var fileInput = document.getElementById('logoUpload');
-  var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+      if (target === 'restdays') loadRestDaysTab();
+      if (target === 'emails') loadEmailsTab();
+    });
+  });
 
-  if (hasFile) {
-    var reader = new FileReader();
-    reader.onload = function (loadEvent) {
-      var base64 = loadEvent.target.result.split(',')[1];
-      var formData = {
-        companyName: document.getElementById('companyNameInput').value,
-        logo: { bytes: base64, mimeType: fileInput.files[0].type }
-      };
+  // --- Open / Close ---
+  window.openCompanySettings = function () {
+    var overlay = document.getElementById('companySettingsOverlay');
+    overlay.style.display = 'flex';
+    // Reset to Company tab
+    document.querySelectorAll('.settings-tab').forEach(function (t) {
+      t.classList.remove('active');
+      t.style.borderBottomColor = 'transparent';
+      t.style.color = 'var(--muted)';
+    });
+    var firstTab = document.querySelector('.settings-tab[data-tab="company"]');
+    if (firstTab) {
+      firstTab.classList.add('active');
+      firstTab.style.borderBottomColor = 'var(--accent)';
+      firstTab.style.color = 'var(--text)';
+    }
+    document.querySelectorAll('.settings-tab-panel').forEach(function (p) { p.style.display = 'none'; });
+    document.getElementById('tabCompany').style.display = 'block';
+
+    loadCompanyTab();
+  };
+
+  document.getElementById('settingsCloseBtn').addEventListener('click', function () {
+    document.getElementById('companySettingsOverlay').style.display = 'none';
+  });
+  document.getElementById('companySettingsOverlay').addEventListener('click', function (e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+
+  // ===== TAB 1: COMPANY =====
+  function loadCompanyTab() {
+    google.script.run
+      .withSuccessHandler(function (info) {
+        document.getElementById('companyNameInput').value = info.name || 'United Ocean Trading and Services';
+        if (info.logoUrl) {
+          var preview = document.getElementById('logoPreview');
+          preview.innerHTML = '<img src="' + info.logoUrl + '" style="max-width:150px;max-height:60px;">';
+          preview.style.display = 'block';
+          document.getElementById('removeLogoBtn').style.display = '';
+        } else {
+          document.getElementById('logoPreview').style.display = 'none';
+          document.getElementById('removeLogoBtn').style.display = 'none';
+        }
+      })
+      .getCompanyInfo();
+  }
+
+  document.getElementById('companySettingsForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = document.getElementById('companySettingsSave');
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+
+    var fileInput = document.getElementById('logoUpload');
+    var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+
+    function doSave(formData) {
       google.script.run
         .withSuccessHandler(function (result) {
           btn.disabled = false;
           btn.textContent = 'Save';
           if (result.success) {
-            document.getElementById('companySettingsOverlay').style.display = 'none';
             showStatus('success', result.message);
-        } else {
-          showStatus('error', friendlyError(result.error));
-        }
-      })
+            loadCompanyTab();
+          } else {
+            showStatus('error', friendlyError(result.error));
+          }
+        })
         .withFailureHandler(function (err) {
           btn.disabled = false;
           btn.textContent = 'Save';
           showStatus('error', friendlyError(err));
         })
         .saveCompanyInfo(formData);
-    };
-    reader.readAsDataURL(fileInput.files[0]);
-  } else {
-    var formData = {
-      companyName: document.getElementById('companyNameInput').value,
-      logo: null
-    };
+    }
+
+    if (hasFile) {
+      var reader = new FileReader();
+      reader.onload = function (loadEvent) {
+        var base64 = loadEvent.target.result.split(',')[1];
+        doSave({
+          companyName: document.getElementById('companyNameInput').value,
+          logo: { bytes: base64, mimeType: fileInput.files[0].type }
+        });
+      };
+      reader.readAsDataURL(fileInput.files[0]);
+    } else {
+      doSave({ companyName: document.getElementById('companyNameInput').value, logo: null });
+    }
+  });
+
+  document.getElementById('removeLogoBtn').addEventListener('click', function () {
+    google.script.run
+      .withSuccessHandler(function () {
+        document.getElementById('logoPreview').innerHTML = '';
+        document.getElementById('logoPreview').style.display = 'none';
+        document.getElementById('removeLogoBtn').style.display = 'none';
+        document.getElementById('logoUpload').value = '';
+        showStatus('success', 'Logo removed.');
+      })
+      .removeCompanyLogo();
+  });
+
+  // ===== TAB 2: REST DAYS =====
+  var selectedRestDays = [];
+
+  function loadRestDaysTab() {
+    google.script.run
+      .withSuccessHandler(function (days) {
+        selectedRestDays = Array.isArray(days) ? days : [5];
+        renderRestDaysGrid();
+      })
+      .getRestDays();
+  }
+
+  function renderRestDaysGrid() {
+    var grid = document.getElementById('restDaysGrid');
+    grid.innerHTML = '';
+    DAY_LABELS.forEach(function (label, i) {
+      var weekdayNum = i + 1; // 1=Mon..7=Sun (WEEKDAY mode 2)
+      var checked = selectedRestDays.indexOf(weekdayNum) !== -1;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.setAttribute('data-day', weekdayNum);
+      btn.style.cssText = 'padding:10px 4px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;border:1.5px solid ' +
+        (checked ? 'var(--accent)' : 'var(--border)') + ';background:' +
+        (checked ? 'var(--accent-tint, #fef3c7)' : 'var(--card)') + ';color:' +
+        (checked ? 'var(--accent-dark, #92400e)' : 'var(--text)') + ';transition:all 0.15s;';
+      btn.addEventListener('click', function () {
+        var day = parseInt(this.getAttribute('data-day'));
+        var idx = selectedRestDays.indexOf(day);
+        if (idx === -1) selectedRestDays.push(day);
+        else selectedRestDays.splice(idx, 1);
+        renderRestDaysGrid();
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  document.getElementById('saveRestDaysBtn').addEventListener('click', function () {
+    if (selectedRestDays.length === 0) {
+      showStatus('error', 'Select at least one rest day.');
+      return;
+    }
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
     google.script.run
       .withSuccessHandler(function (result) {
         btn.disabled = false;
         btn.textContent = 'Save';
         if (result.success) {
-          document.getElementById('companySettingsOverlay').style.display = 'none';
           showStatus('success', result.message);
         } else {
           showStatus('error', friendlyError(result.error));
         }
       })
-        .withFailureHandler(function (err) {
-          btn.disabled = false;
-          btn.textContent = 'Save';
-          showStatus('error', friendlyError(err));
-        })
-      .saveCompanyInfo(formData);
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        showStatus('error', friendlyError(err));
+      })
+      .saveRestDays({ days: selectedRestDays });
+  });
+
+  // ===== TAB 3: EMPLOYEE EMAILS =====
+  function loadEmailsTab() {
+    var list = document.getElementById('employeeEmailList');
+    list.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;">Loading employees...</p>';
+
+    google.script.run
+      .withSuccessHandler(function (data) {
+        var employees = data.employees || [];
+        var emailMap = data.emailMap || {};
+
+        if (employees.length === 0) {
+          list.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;">No employees found in timesheets yet.</p>';
+          return;
+        }
+
+        list.innerHTML = '';
+        employees.forEach(function (name) {
+          var email = '';
+          var keys = Object.keys(emailMap);
+          for (var i = 0; i < keys.length; i++) {
+            if (keys[i].toLowerCase().trim() === name.toLowerCase().trim()) {
+              email = emailMap[keys[i]];
+              break;
+            }
+          }
+
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+          row.innerHTML =
+            '<span style="flex:1;font-size:12px;font-weight:500;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</span>' +
+            '<input type="email" class="emp-email-input" data-emp="' + escapeHtml(name) + '" value="' + escapeHtml(email) + '" placeholder="email@example.com" style="flex:1.5;padding:6px 8px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);min-width:0;">';
+          list.appendChild(row);
+        });
+      })
+      .withFailureHandler(function (err) {
+        list.innerHTML = '<p style="font-size:12px;color:var(--error);text-align:center;padding:20px;">Failed to load: ' + friendlyError(err) + '</p>';
+      })
+      .getEmployeeEmailSettings();
   }
-});
 
-document.getElementById('companySettingsCancel').addEventListener('click', function () {
-  document.getElementById('companySettingsOverlay').style.display = 'none';
-});
+  document.getElementById('saveEmployeeEmailsBtn').addEventListener('click', function () {
+    var inputs = document.querySelectorAll('.emp-email-input');
+    var map = {};
+    inputs.forEach(function (input) {
+      var name = input.getAttribute('data-emp');
+      var email = input.value.trim();
+      if (email) map[name] = email;
+    });
 
-document.getElementById('removeLogoBtn').addEventListener('click', function () {
-  google.script.run
-    .withSuccessHandler(function () {
-      document.getElementById('logoPreview').innerHTML = '';
-      document.getElementById('logoPreview').style.display = 'none';
-      document.getElementById('removeLogoBtn').style.display = 'none';
-      document.getElementById('logoUpload').value = '';
-      showStatus('success', 'Logo removed.');
-    })
-    .removeCompanyLogo();
-});
-
-document.getElementById('companySettingsOverlay').addEventListener('click', function (e) {
-  if (e.target === this) this.style.display = 'none';
-});
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    google.script.run
+      .withSuccessHandler(function (result) {
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        if (result.success) {
+          showStatus('success', result.message);
+        } else {
+          showStatus('error', friendlyError(result.error));
+        }
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        showStatus('error', friendlyError(err));
+      })
+      .saveEmployeeEmails({ map: map });
+  });
+})();
 </script>

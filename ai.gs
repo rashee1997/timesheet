@@ -22,7 +22,7 @@ const AI_PARSE_MAX_ENTRIES = 80;
 const AI_PARSE_MAX_INPUT_CHARS = 6000;
 
 const CLOUDFLARE_GATEWAY_ID = 'default';
-const GEMINI_VISION_MODEL_PRIMARY = 'google-ai-studio/gemini-3.5-flash';
+const GEMINI_VISION_MODEL_PRIMARY = 'google-ai-studio/gemini-3.6-flash';
 const GEMINI_VISION_MODEL_FALLBACK = 'google-ai-studio/gemini-3.1-flash-lite';
 const AI_PARSE_MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024;
 

@@ -572,12 +572,17 @@ function buildHourFormulas(targetRow, col) {
   var endCell = getColumnLetter(col + 1) + targetRow;
   var totalCell = getColumnLetter(col + 2) + targetRow;
   var normalCell = getColumnLetter(col + 3) + targetRow;
-  var isFriday = 'WEEKDAY(' + dateCell + ',2)=5'; // Friday = rest day, full OT, no Normal
+
+  var restDays = getRestDays();
+  var restChecks = restDays.map(function (d) { return 'WEEKDAY(' + dateCell + ',2)=' + d; });
+  var isRestDay = restChecks.length === 1
+    ? restChecks[0]
+    : 'OR(' + restChecks.join(',') + ')';
 
   return {
     total: '=IF(OR(ISBLANK(' + startCell + '), ISBLANK(' + endCell + ')), "", ' + endCell + '-' + startCell + ' + IF(' + endCell + '<' + startCell + ', 1, 0))',
-    normal: '=IF(' + totalCell + '="", "", IF(' + isFriday + ', 0, MIN(TIME(8,0,0), ' + totalCell + ')))',
-    ot: '=IF(' + totalCell + '="", "", IF(' + isFriday + ', ' + totalCell + ', ' + totalCell + '-' + normalCell + '))'
+    normal: '=IF(' + totalCell + '="", "", IF(' + isRestDay + ', 0, MIN(TIME(8,0,0), ' + totalCell + ')))',
+    ot: '=IF(' + totalCell + '="", "", IF(' + isRestDay + ', ' + totalCell + ', ' + totalCell + '-' + normalCell + '))'
   };
 }
 

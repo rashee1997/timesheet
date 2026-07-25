@@ -70,7 +70,17 @@ var API_ACTIONS = {
   // ---- Phase 6: AI features ----
   smartCheckEntries: function (p) { return smartCheckEntries(p); },
   getDashboardNarrative: function (p) { return getDashboardNarrative(p); },
-  askTimesheetQuery: function (p) { return askTimesheetQuery(p); }
+  askTimesheetQuery: function (p) { return askTimesheetQuery(p); },
+
+  // ---- Phase 7: Settings & per-employee reports ----
+  getRestDays: function () { return getRestDays(); },
+  saveRestDays: function (p) { return saveRestDays(p.days); },
+  getEmployeeEmailSettings: function () { return getEmployeeEmailSettings(); },
+  saveEmployeeEmails: function (p) { return saveEmployeeEmails(p.map); },
+  sendPerEmployeeReports: function (p, actorEmail) {
+    return sendPerEmployeeReports(Object.assign({}, p, { actorEmail: actorEmail }));
+  },
+  previewPerEmployeeReports: function (p) { return previewPerEmployeeReports(p.startDate, p.endDate); }
 };
 
 function doPost(e) {

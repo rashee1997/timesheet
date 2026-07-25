@@ -592,3 +592,181 @@ function parseTimeToMs(val) {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------
+// PER-EMPLOYEE REPORTS
+// ---------------------------------------------------------------------
+
+function sendPerEmployeeReports(payload) {
+  try {
+    if (!payload || !payload.startDate || !payload.endDate) {
+      throw new Error('Please select a date range.');
+    }
+
+    var report = generateOtReport(payload.startDate, payload.endDate);
+    var emailMap = getEmployeeEmailMap();
+    var sent = 0;
+    var skipped = [];
+    var errors = [];
+
+    report.rows.forEach(function (row) {
+      var email = findEmailForEmployee(row.name, emailMap);
+      if (!email) {
+        skipped.push(row.name);
+        return;
+      }
+
+      try {
+        var singleReport = generateOtReport(payload.startDate, payload.endDate, [row.name]);
+        var html = buildSingleEmployeeHtml(singleReport, row.name);
+        var text = buildSingleEmployeeText(singleReport, row.name);
+
+        var attachments = [];
+        if (payload.attachExcel) {
+          try {
+            var scan = collectTimesheetEntries(payload.startDate, payload.endDate);
+            attachments = buildReportExcel(singleReport, scan.entries);
+          } catch (xlErr) {
+            Logger.log('Excel generation failed for ' + row.name + ': ' + xlErr);
+          }
+        }
+
+        MailApp.sendEmail({
+          to: email,
+          subject: 'Your Timesheet Report (' + singleReport.startDate + ' - ' + singleReport.endDate + ')',
+          body: text,
+          htmlBody: html,
+          attachments: attachments.length > 0 ? attachments : undefined
+        });
+        sent++;
+      } catch (mailErr) {
+        errors.push(row.name + ' (' + email + '): ' + (mailErr.message || mailErr));
+        Logger.log('sendPerEmployeeReports: failed for ' + row.name + ': ' + mailErr);
+      }
+    });
+
+    var msg = 'Sent individual reports to ' + sent + ' employee(s).';
+    if (skipped.length > 0) msg += ' Skipped (no email configured): ' + skipped.join(', ') + '.';
+    if (errors.length > 0) msg += ' Failed: ' + errors.length + '.';
+
+    logAudit('send_per_employee', null, null, null,
+      'Sent per-employee reports ' + report.startDate + '-' + report.endDate +
+      ': ' + sent + ' sent, ' + skipped.length + ' skipped');
+
+    try {
+      var notifEmail = payload.actorEmail || Session.getActiveUser().getEmail();
+      createNotification(notifEmail,
+        'Per-employee reports sent: ' + sent + ' sent' +
+        (skipped.length ? ', ' + skipped.length + ' skipped (no email)' : '') + '.',
+        'info', '');
+    } catch (notifErr) {
+      Logger.log('Notification failed: ' + notifErr);
+    }
+
+    return { success: true, message: msg, sent: sent, skipped: skipped, errors: errors };
+  } catch (err) {
+    Logger.log('sendPerEmployeeReports error: ' + err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+function previewPerEmployeeReports(startDateStr, endDateStr) {
+  try {
+    var report = generateOtReport(startDateStr, endDateStr);
+    var emailMap = getEmployeeEmailMap();
+    var withEmail = [];
+    var withoutEmail = [];
+
+    report.rows.forEach(function (row) {
+      var email = findEmailForEmployee(row.name, emailMap);
+      var entry = { name: row.name, normalHours: row.normalHours, otHours: row.otHours, totalHours: row.totalHours, daysWorked: row.daysWorked };
+      if (email) {
+        entry.email = email;
+        withEmail.push(entry);
+      } else {
+        withoutEmail.push(entry);
+      }
+    });
+
+    return {
+      success: true,
+      withEmail: withEmail,
+      withoutEmail: withoutEmail,
+      startDate: report.startDate,
+      endDate: report.endDate
+    };
+  } catch (err) {
+    Logger.log('previewPerEmployeeReports error: ' + err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+function findEmailForEmployee(name, emailMap) {
+  if (emailMap[name]) return emailMap[name];
+  var lower = String(name).toLowerCase().trim();
+  var keys = Object.keys(emailMap);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i].toLowerCase().trim() === lower) return emailMap[keys[i]];
+  }
+  return null;
+}
+
+function buildSingleEmployeeHtml(report, employeeName) {
+  var row = report.rows.length > 0 ? report.rows[0] : null;
+
+  var tableHtml = '';
+  if (row) {
+    tableHtml =
+      '<table style="border-collapse:collapse;width:100%;max-width:400px;margin-bottom:12px;">' +
+      '<thead><tr style="background:#fbf0e6;">' +
+      '<th style="padding:8px 12px;text-align:left;">Metric</th>' +
+      '<th style="padding:8px 12px;text-align:right;">Value</th>' +
+      '</tr></thead><tbody>' +
+      '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;">Normal Hours</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">' + row.normalHours.toFixed(2) + '</td></tr>' +
+      '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;">OT Hours</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;color:#b56f39;">' + row.otHours.toFixed(2) + '</td></tr>' +
+      '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;">Total Hours</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">' + row.totalHours.toFixed(2) + '</td></tr>' +
+      '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;">Days Worked</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">' + row.daysWorked + '</td></tr>' +
+      '<tr><td style="padding:8px 12px;">Entry Range</td><td style="padding:8px 12px;text-align:right;font-size:11px;color:#6b7280;">' + row.firstEntry + ' - ' + row.lastEntry + '</td></tr>' +
+      '</tbody></table>';
+  } else {
+    tableHtml = '<p style="color:#6b7280;">No timesheet entries found for this period.</p>';
+  }
+
+  var futureNote = report.futureRangeNote
+    ? '<p style="font-size:11.5px;color:#b45309;background:#fffbeb;border:1px solid #f59e0b;padding:6px 10px;border-radius:6px;margin:0 0 10px;">' + escapeHtml(report.futureRangeNote) + '</p>'
+    : '';
+
+  return '<div style="font-family:Arial,sans-serif;color:#1f2937;">' +
+    '<h2 style="color:#b56f39;margin-bottom:4px;">Your Timesheet Report</h2>' +
+    '<p style="color:#6b7280;margin-top:0;margin-bottom:4px;"><strong>' + escapeHtml(employeeName) + '</strong></p>' +
+    '<p style="color:#6b7280;margin-top:0;margin-bottom:16px;">' + report.startDate + ' to ' + report.endDate + '</p>' +
+    futureNote +
+    tableHtml +
+    '<p style="font-size:11px;color:#9ca3af;margin-top:10px;">If you notice any discrepancies, please contact your supervisor.</p>' +
+    '</div>';
+}
+
+function buildSingleEmployeeText(report, employeeName) {
+  var text = 'YOUR TIMESHEET REPORT\n';
+  text += employeeName + '\n';
+  text += report.startDate + ' to ' + report.endDate + '\n\n';
+
+  if (report.futureRangeNote) {
+    text += report.futureRangeNote + '\n\n';
+  }
+
+  if (report.rows.length === 0) {
+    text += 'No timesheet entries found for this period.\n';
+    return text;
+  }
+
+  var row = report.rows[0];
+  text += 'Normal Hours:  ' + row.normalHours.toFixed(2) + '\n';
+  text += 'OT Hours:      ' + row.otHours.toFixed(2) + '\n';
+  text += 'Total Hours:   ' + row.totalHours.toFixed(2) + '\n';
+  text += 'Days Worked:   ' + row.daysWorked + '\n';
+  text += 'Entry Range:   ' + row.firstEntry + ' - ' + row.lastEntry + '\n';
+  text += '\nIf you notice any discrepancies, please contact your supervisor.\n';
+
+  return text;
+}

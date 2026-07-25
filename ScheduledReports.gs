@@ -62,6 +62,19 @@ function runScheduledReport() {
       htmlBody: buildReportHtml(report)
     });
     Logger.log('Scheduled report sent to ' + config.emails.length + ' recipient(s).');
+
+    if (config.sendPerEmployee) {
+      try {
+        sendPerEmployeeReports({
+          startDate: range.start,
+          endDate: range.end,
+          attachExcel: !!config.attachExcelPerEmployee
+        });
+        Logger.log('Scheduled per-employee reports sent.');
+      } catch (perEmpErr) {
+        Logger.log('Scheduled per-employee reports failed: ' + perEmpErr);
+      }
+    }
   } catch (e) {
     Logger.log('runScheduledReport failed: ' + e);
   }

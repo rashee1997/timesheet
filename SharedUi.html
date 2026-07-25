@@ -154,6 +154,17 @@ function showAiStatus(type, message) {
 }
 
 /**
+ * Clear the AI status box.
+ */
+function clearAiStatus() {
+  var box = document.getElementById('aiStatusBox');
+  if (box) {
+    box.className = 'status-box';
+    box.innerHTML = '';
+  }
+}
+
+/**
  * Clear the main status box and any auto-dismiss timer.
  */
 function clearStatus() {

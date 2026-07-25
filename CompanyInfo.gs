@@ -20,7 +20,11 @@ function saveCompanyInfo(formData) {
 
   if (typeof formData.logoUrl === 'string' && formData.logoUrl.trim()) {
     // New web app path: already uploaded to Vercel Blob, just store the URL.
-    props.setProperty(COMPANY_LOGO_PROP, formData.logoUrl.trim());
+    var logoUrl = formData.logoUrl.trim();
+    if (logoUrl.indexOf('https://') !== 0) {
+      return { success: false, error: 'Logo URL must start with https://' };
+    }
+    props.setProperty(COMPANY_LOGO_PROP, logoUrl);
   } else if (formData.logo && typeof formData.logo === 'object' && formData.logo.bytes) {
     // Legacy Sheets-dialog path: upload raw bytes to Drive.
     try {

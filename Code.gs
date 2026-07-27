@@ -571,25 +571,62 @@ function coreValidateAndWrite_(sheet, rawEntries, flags) {
     };
   }
 
-  // ---- Batched write (document lock already held by coreProcessEntries) ----
+  // ---- Batched write, grouped per TARGET ROW (document lock held by caller) ----
+  // Many employees can share one date (one sheet row). Grouping turns N
+  // per-entry setValues calls into ONE setValues per distinct row, so a
+  // 200-entry QuickFill import costs a handful of writes instead of 200.
+  // We also start from the in-memory row snapshot already read at the top
+  // (allValues), so the write itself needs zero extra sheet reads.
   const undoEntries = [];
   const timeFmt = [], hourFmt = [], textFmt = [], centered = [], leftAligned = [];
+  const entriesByRow = {};
   validated.forEach(function (entry) {
-    const row = entry.targetRow, col = entry.employeeColumn;
-    undoEntries.push({
-      targetRow: row,
-      employeeColumn: col,
-      prevValues: allValues[row - 1].slice(col - 1, col - 1 + CONFIG.COLS_PER_EMPLOYEE)
-    });
-    const f = buildHourFormulas(row, col);
-    sheet.getRange(row, col, 1, CONFIG.COLS_PER_EMPLOYEE)
-      .setValues([[entry.startTime, entry.endTime, f.total, f.normal, f.ot, entry.jobOrder]]);
-    timeFmt.push(getColumnLetter(col) + row + ':' + getColumnLetter(col + 1) + row);
-    hourFmt.push(getColumnLetter(col + 2) + row + ':' + getColumnLetter(col + 4) + row);
-    textFmt.push(getColumnLetter(col + 5) + row);
-    centered.push(getColumnLetter(col) + row + ':' + getColumnLetter(col + 4) + row);
-    leftAligned.push(getColumnLetter(col + 5) + row);
+    (entriesByRow[entry.targetRow] = entriesByRow[entry.targetRow] || []).push(entry);
   });
+
+  const rowUndoRefs = []; // [{ row, refs:[undoEntry,...] }] for post-flush read-back
+  Object.keys(entriesByRow).forEach(function (rowKey) {
+    const row = Number(rowKey);
+    const rowGrid = allValues[row - 1].slice(); // copy of current row (no re-read)
+
+    // Apply each edited employee block's new values into the row grid.
+    const refs = [];
+    entriesByRow[rowKey].forEach(function (entry) {
+      const col = entry.employeeColumn;
+      const f = buildHourFormulas(row, col);
+      const vals = [entry.startTime, entry.endTime, f.total, f.normal, f.ot, entry.jobOrder];
+      for (let c = 0; c < CONFIG.COLS_PER_EMPLOYEE; c++) rowGrid[col - 1 + c] = vals[c];
+      const u = {
+        targetRow: row,
+        employeeColumn: col,
+        prevValues: allValues[row - 1].slice(col - 1, col - 1 + CONFIG.COLS_PER_EMPLOYEE)
+      };
+      undoEntries.push(u);
+      refs.push(u);
+      timeFmt.push(getColumnLetter(col) + row + ':' + getColumnLetter(col + 1) + row);
+      hourFmt.push(getColumnLetter(col + 2) + row + ':' + getColumnLetter(col + 4) + row);
+      textFmt.push(getColumnLetter(col + 5) + row);
+      centered.push(getColumnLetter(col) + row + ':' + getColumnLetter(col + 4) + row);
+      leftAligned.push(getColumnLetter(col + 5) + row);
+    });
+
+    // Re-derive TOTAL/NORMAL/OT formulas for EVERY block on this row before
+    // writing, so the whole-row write does not flatten the live formulas of
+    // blocks we did not edit into static values.
+    Object.keys(validStartCols).forEach(function (colStr) {
+      const c = Number(colStr);
+      const lastIdx = c - 1 + CONFIG.COLS_PER_EMPLOYEE - 1; // = c + 4
+      if (lastIdx >= rowGrid.length) return; // malformed trailing block, leave as-is
+      const f = buildHourFormulas(row, c);
+      rowGrid[c - 1 + 2] = f.total;
+      rowGrid[c - 1 + 3] = f.normal;
+      rowGrid[c - 1 + 4] = f.ot;
+    });
+
+    sheet.getRange(row, 1, 1, rowGrid.length).setValues([rowGrid]); // ONE write for the whole row
+    rowUndoRefs.push({ row: row, refs: refs });
+  });
+
   // Force consistent formats/alignment every save so a stray manual edit
   // (e.g. cell set to Text/General) can't throw off how times/durations
   // render or sum — one RangeList call per format instead of five getRange
@@ -601,10 +638,14 @@ function coreValidateAndWrite_(sheet, rawEntries, flags) {
   sheet.getRangeList(leftAligned).setHorizontalAlignment('left').setVerticalAlignment('middle');
   SpreadsheetApp.flush();
 
-  // Snapshot what the write actually produced (computed formula results
-  // included) so undo can verify nothing changed underneath it before restoring.
-  undoEntries.forEach(function (u) {
-    u.writtenValues = sheet.getRange(u.targetRow, u.employeeColumn, 1, CONFIG.COLS_PER_EMPLOYEE).getValues()[0];
+  // Snapshot what the write produced (computed formula results included) so
+  // undo can verify nothing changed underneath it before restoring. ONE row
+  // read-back per distinct row instead of one per entry (was N reads).
+  rowUndoRefs.forEach(function (item) {
+    const writtenRow = sheet.getRange(item.row, 1, 1, lastCol).getValues()[0];
+    item.refs.forEach(function (u) {
+      u.writtenValues = writtenRow.slice(u.employeeColumn - 1, u.employeeColumn - 1 + CONFIG.COLS_PER_EMPLOYEE);
+    });
   });
 
   return { validated: validated, undoEntries: undoEntries, totalHoursSum: totalHoursSum };

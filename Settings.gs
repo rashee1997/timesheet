@@ -34,6 +34,7 @@ function saveRestDays(days) {
   }
   PropertiesService.getScriptProperties().setProperty(REST_DAYS_PROP, JSON.stringify(days));
   _restDaysMemo = null;
+  invalidateTimesheetScanCache_();
   return { success: true, message: 'Rest days updated.' };
 }
 

@@ -27,10 +27,10 @@ JSON Web App so the standalone frontend below can call it.
         ▼
  Next.js app (Vercel) ── verifies Google ID token
         │
-        │  POST /exec  { action, payload, actorEmail, sharedSecret }
+        │  POST /exec  { action, payload, actorEmail, timestamp, signature }
         ▼
  Apps Script Web App (this repo) ── Api.gs::doPost
-        │  1. checks sharedSecret against Script Properties
+        │  1. verifies timestamped HMAC signature
         │  2. looks up `action` in the API_ACTIONS whitelist
         │  3. calls the matching handler, e.g. Code.gs::submitTimeEntry
         ▼
@@ -40,9 +40,9 @@ JSON Web App so the standalone frontend below can call it.
 **Two independent checks stack on every request:**
 
 1. **Identity** — the Next.js proxy (`app/api/gas/route.ts` in the frontend repo) verifies the caller is a real, logged-in company Google account via `google-auth-library`, since Apps Script has no npm access to do this itself.
-2. **Origin** — this Web App only trusts requests carrying the shared secret stored in Script Properties. `doPost` rejects anything without a matching secret before touching the whitelist, so even a leaked `/exec` URL is useless without it.
+2. **Origin** — this Web App only trusts requests signed by the frontend proxy with the shared secret stored in Script Properties. `doPost` rejects missing, stale, or invalid HMAC signatures before touching the whitelist, so even a leaked `/exec` URL is useless without the signing secret.
 
-`doPost` cannot read custom HTTP headers (Google Issue Tracker #67764685, official won't-fix), so the secret travels inside the JSON body instead of a header.
+`doPost` cannot read custom HTTP headers (Google Issue Tracker #67764685, official won't-fix), so the timestamp and signature travel inside the JSON body instead of headers.
 
 Only actions listed in `Api.gs`'s `API_ACTIONS` map are reachable from the outside — everything else in the script is unreachable from the Web App, by construction rather than by convention.
 
@@ -78,4 +78,4 @@ Run `setupApiSharedSecret()` once from the Apps Script editor to generate and st
 
 ## Sibling frontend project
 
-Next.js app deployed on Vercel that calls this backend's Web App through a server-side proxy (`src/app/api/gas/route.ts`), which verifies the caller's Google ID token and forwards requests with the shared secret. When a frontend request needs a new backend capability: add the handler in the relevant `.gs` file here, then whitelist it in `Api.gs`'s `API_ACTIONS` map before wiring the frontend call. See [rashee1997/timesheet-web](https://github.com/rashee1997/timesheet-web).
+Next.js app deployed on Vercel that calls this backend's Web App through a server-side proxy (`src/app/api/gas/route.ts`), which verifies the caller's Google ID token and forwards requests with a timestamped HMAC signature. When a frontend request needs a new backend capability: add the handler in the relevant `.gs` file here, then whitelist it in `Api.gs`'s `API_ACTIONS` map before wiring the frontend call. See [rashee1997/timesheet-web](https://github.com/rashee1997/timesheet-web).

@@ -14,7 +14,8 @@ Local path: `F:\timesheet-web`. GitHub: `rashee1997/timesheet-web`.
 Next.js app deployed on Vercel (`https://timesheet-web-woad.vercel.app`) that
 calls this backend's Web App through a server-side proxy
 (`src/app/api/gas/route.ts`), which verifies the caller's Google ID token and
-forwards requests with a shared secret. When a frontend request needs a new
+forwards requests with a timestamped HMAC signature derived from a shared secret.
+When a frontend request needs a new
 backend capability, add the handler here and whitelist it in `Api.gs`'s
 `API_ACTIONS` map before wiring the frontend call.
 

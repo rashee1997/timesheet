@@ -9,15 +9,22 @@ tracked in this file).
 ## [Unreleased]
 
 ### Added
+- **Api.gs**: Added metadata-driven API action definitions with request validation and read/write classification
+- **Api.gs**: Added `getBackendStatus` for non-sensitive backend diagnostics
+- **Api.gs**: Added `runApiSelfTests()` for HMAC, validation, response-shape, and cache-invalidation checks
 - Added CHANGELOG.md for tracking security and feature changes
 
 ### Changed
-- Updated README.md with comprehensive Architecture section documenting the two-check trust model (Google ID token verification in Next.js proxy + shared-secret check in Api.gs::doPost)
+- **Api.gs**: Normalized API dispatch through payload validation and response-shape handling while preserving existing frontend-compatible success shapes
+- **Settings.gs**: Rest-day changes now invalidate cached timesheet scans so normal/OT totals refresh immediately
+- Updated README.md with comprehensive Architecture section documenting the two-check trust model (Google ID token verification in Next.js proxy + HMAC signature check in Api.gs::doPost)
 - Added secret rotation warning to README.md with instructions for `setupApiSharedSecret()`
 - Added Cloudflare Workers AI rationale to README.md explaining data-handling posture for timesheet data
 - Reorganized README.md sections for better flow: Architecture, Why Cloudflare AI, Development, Web App deployment (with rotation subsection), Sibling frontend project
 
 ### Security
+- **Api.gs**: Removed the legacy direct `sharedSecret` request-body fallback; Web App calls now require fresh timestamped HMAC signatures
+- **Api.gs**: Added request IDs to internal API logs and unexpected-error responses for easier production troubleshooting
 - **Api.gs**: Fixed information leak where "Missing request body" error was thrown before shared secret check; now returns generic "Not authorized" error for all pre-auth failures
 - **Api.gs**: Changed "Unknown action: {actionName}" error to generic "Invalid action" to prevent action enumeration
 - **Api.gs**: Added JSON parse error handling before auth check to prevent parsing errors from leaking info
